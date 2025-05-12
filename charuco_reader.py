@@ -19,8 +19,10 @@ UHD = (3840, 2160)
 boardID = 0
 x_squares = 7
 y_squares = 7
-squareLength = 0.053
-markerLength = 0.039
+# squareLength = 0.053
+# markerLength = 0.039
+squareLength = 0.04
+markerLength = 0.03
 
 size = (x_squares, y_squares)
 step = int(x_squares * y_squares / 2.0)

@@ -1,4 +1,4 @@
-""" Description: Record data from camera and draw Charuco board """
+""" Description: Record data from camera and draw multiple Charuco boards """
 import os
 import cv2
 import argparse 
@@ -16,17 +16,14 @@ UHD = (3840, 2160)
 # -------------------------------------------
 # CONFIGURATION
 # -------------------------------------------
-boardID = 0
-x_squares = 7
-y_squares = 7
-squareLength = 0.053
-markerLength = 0.039
+# Define board configurations
+NUM_BOARDS = 5
+SQUARES_X = 7
+SQUARES_Y = 7
+SQUARE_LENGTH = 0.053
+MARKER_LENGTH = 0.039
 
-size = (x_squares, y_squares)
-step = int(x_squares * y_squares / 2.0)
-ids = np.array(range(boardID*step, (boardID+1)*step), dtype=np.int32)
-
-# Define the dictionary and board parameters
+# Define the dictionary
 aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_6X6_1000)
 
 # Detector parameters - optimized for accuracy and robustness
@@ -45,78 +42,138 @@ params.polygonalApproxAccuracyRate = 0.03
 params.minCornerDistanceRate = 0.05
 params.minDistanceToBorder = 3
 params.minMarkerDistanceRate = 0.05
-params.useAruco3Detection = True        # Use the faster Aruco3 detection method
+params.useAruco3Detection = True
 
 # Charuco detector parameters
 charuco_params = cv2.aruco.CharucoParameters()
-charuco_params.minMarkers = 2           # Minimum markers needed to detect a Charuco corner
-charuco_params.tryRefineMarkers = True  # Try to refine marker detection
+charuco_params.minMarkers = 2
+charuco_params.tryRefineMarkers = True
 
-# Define the Charuco board
-board = cv2.aruco.CharucoBoard(
-    size=size,
-    squareLength=squareLength,
-    markerLength=markerLength,
-    dictionary=aruco_dict,
-    ids=ids
-)
+# Define board configurations with different ID ranges and colors
+board_configs = []
+markers_per_board = int(SQUARES_X * SQUARES_Y / 2.0)  # Number of markers per board
 
-# Create CharucoDetector with optimized parameters
-charuco_detector = cv2.aruco.CharucoDetector(board,
-                                             detectorParams=params,
-                                             charucoParams=charuco_params)
+for i in range(NUM_BOARDS):
+    start_id = i * markers_per_board
+    end_id = (i + 1) * markers_per_board
+    
+    # Create a unique color for each board
+    color = [0, 0, 0]
+    color[i % 3] = 255
+    if i >= 3:
+        color[(i+1) % 3] = 255
+    
+    board_configs.append({
+        "name": f"Board {i+1}",
+        "id_range": (start_id, end_id),
+        "color": tuple(color),
+        "board": cv2.aruco.CharucoBoard(
+            size=(SQUARES_X, SQUARES_Y),
+            squareLength=SQUARE_LENGTH,
+            markerLength=MARKER_LENGTH,
+            dictionary=aruco_dict
+        )
+    })
 
 
 def process_frame(args, frame):
     # Convert to grayscale
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
     
-    # Detect markers and interpolate Charuco corners in one step
-    charuco_corners, charuco_ids, marker_corners, marker_ids = charuco_detector.detectBoard(gray)
-
-    # Visualization
+    # Detect all markers first
+    marker_corners, marker_ids, rejected = cv2.aruco.detectMarkers(
+        gray, aruco_dict, parameters=params
+    )
+    
+    # Draw all detected markers if requested
     if marker_corners and args.draw_marker_corners:
         cv2.aruco.drawDetectedMarkers(frame, marker_corners, marker_ids, borderColor=(0, 255, 255))
-
-    # Check if Charuco corners are detected
-    if not (charuco_corners is not None and len(charuco_corners) > 0):
-        return
-
-    if args.draw_charuco_corners:
-        cv2.aruco.drawDetectedCornersCharuco(frame, charuco_corners, charuco_ids, cornerColor=(255, 255, 0))
     
-    if args.show_ids:
-        for charuco_corner, charuco_id in zip(charuco_corners, charuco_ids.flatten()):
-            pos = (int(charuco_corner[0][0]), int(charuco_corner[0][1]))
-            cv2.putText(frame, str(charuco_id), pos,
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 0), 2, cv2.LINE_AA)
-    
-    # Estimate pose if camera parameters are provided
-    if not (args.camera_params and os.path.isfile(args.camera_params)):
+    # If no markers detected, return early
+    if marker_ids is None or len(marker_ids) == 0:
         return
     
-    camera_matrix, dist_coeffs = load_camera_params(args.camera_params)
-    if (camera_matrix is None) or (charuco_corners is None) or len(charuco_corners) < 4:
-        return
+    # Process each board separately
+    for board_config in board_configs:
+        start_id, end_id = board_config["id_range"]
+        board_color = board_config["color"]
+        board_name = board_config["name"]
+        board = board_config["board"]
+        
+        # Filter markers for this board
+        board_marker_indices = [i for i, id in enumerate(marker_ids) if start_id <= id[0] < end_id]
+        if not board_marker_indices:
+            continue
+            
+        board_marker_corners = [marker_corners[i] for i in board_marker_indices]
+        board_marker_ids = np.array([marker_ids[i] for i in board_marker_indices])
+        
+        # Interpolate corners for this board
+        charuco_corners, charuco_ids = cv2.aruco.interpolateCornersCharuco(
+            markerCorners=board_marker_corners, 
+            markerIds=board_marker_ids, 
+            image=gray,
+            board=board
+        )
+        
+        # Skip if no Charuco corners detected
+        if charuco_corners is None or len(charuco_corners) == 0:
+            continue
+            
+        # Draw detected Charuco corners
+        if args.draw_charuco_corners:
+            cv2.aruco.drawDetectedCornersCharuco(
+                frame, charuco_corners, charuco_ids, cornerColor=board_color
+            )
+            
+        # Add board name to the image
+        if len(charuco_corners) > 0:
+            pos = (int(charuco_corners[0][0][0]), int(charuco_corners[0][0][1]) - 20)
+            cv2.putText(frame, board_name, pos, cv2.FONT_HERSHEY_SIMPLEX, 
+                        0.7, board_color, 2, cv2.LINE_AA)
+        
+        # Show IDs if requested
+        if args.show_ids:
+            for charuco_corner, charuco_id in zip(charuco_corners, charuco_ids.flatten()):
+                pos = (int(charuco_corner[0][0]), int(charuco_corner[0][1]))
+                cv2.putText(frame, str(charuco_id), pos,
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, board_color, 1, cv2.LINE_AA)
+        
+        # Estimate pose if camera parameters are provided
+        if not (args.camera_params and os.path.isfile(args.camera_params)):
+            continue
+        
+        camera_matrix, dist_coeffs = load_camera_params(args.camera_params)
+        if camera_matrix is None or len(charuco_corners) < 4:
+            continue
 
-    # Estimate pose
-    ret, rvec, tvec = cv2.aruco.estimatePoseCharucoBoard(
-        charuco_corners, charuco_ids, board, camera_matrix, dist_coeffs, None, None
-    )
+        # Estimate pose
+        ret, rvec, tvec = cv2.aruco.estimatePoseCharucoBoard(
+            charuco_corners, charuco_ids, board, camera_matrix, dist_coeffs, None, None
+        )
 
-    # Only draw axes if pose estimation was successful
-    if not ret:
-        return
-    
-    # Ensure rvec and tvec are properly formatted
-    rvec = np.array(rvec, dtype=np.float32)
-    tvec = np.array(tvec, dtype=np.float32)
+        # Only draw axes if pose estimation was successful
+        if not ret:
+            continue
+        
+        # Ensure rvec and tvec are properly formatted
+        rvec = np.array(rvec, dtype=np.float32)
+        tvec = np.array(tvec, dtype=np.float32)
 
-    # Draw the axes
-    cv2.drawFrameAxes(frame, camera_matrix, dist_coeffs, rvec, tvec, 0.1)
+        # Draw the axes
+        cv2.drawFrameAxes(frame, camera_matrix, dist_coeffs, rvec, tvec, 0.1)
+        
+        # Optionally display distance information
+        if args.show_distance:
+            # Calculate distance (in meters)
+            distance = np.linalg.norm(tvec)
+            distance_text = f"Dist: {distance:.2f}m"
+            text_pos = (int(charuco_corners[0][0][0]), int(charuco_corners[0][0][1]) - 40)
+            cv2.putText(frame, distance_text, text_pos, 
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, board_color, 2, cv2.LINE_AA)
 
 
-def run_pipeline(args, freeze=1, resolution=FHD, frame_name="Charuco Detection"):
+def run_pipeline(args, freeze=1, resolution=FHD, frame_name="Multiple Charuco Detection"):
     # Check if input is an image file
     if os.path.isfile(args.index) and args.index.lower().endswith(('.png', '.jpg', '.jpeg')):
         # Read image from file
@@ -131,7 +188,8 @@ def run_pipeline(args, freeze=1, resolution=FHD, frame_name="Charuco Detection")
         cv2.resizeWindow(frame_name, width=HD[0], height=HD[1])
     
         # Process single image
-        process_frame(args, frame, frame_name)
+        process_frame(args, frame)
+        cv2.imshow(frame_name, frame)
         cv2.waitKey(0)
     else:
         # Process video/camera feed
@@ -200,11 +258,16 @@ def main():
     parser.add_argument('--camera-params', type=str, default="utils/intrinsics.xml", help='path to camera calibration file')
     parser.add_argument('--draw-marker-corners', action="store_true", default=True, help='draw marker corners')
     parser.add_argument('--draw-charuco-corners', action="store_true", default=True, help='draw charuco corners')
-    parser.add_argument('--show-ids', action="store_true", default=False, help='show corner IDs')
+    parser.add_argument('--show-ids', action="store_true", help='show corner IDs')
+    parser.add_argument('--show-distance', action="store_true", help='show distance to board')
+    
     args = parser.parse_args()
-
+    
+    # Create output directory if it doesn't exist
+    os.makedirs(args.output_dir, exist_ok=True)
+    
     run_pipeline(args)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

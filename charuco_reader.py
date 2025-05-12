@@ -16,7 +16,7 @@ UHD = (3840, 2160)
 # -------------------------------------------
 # CONFIGURATION
 # -------------------------------------------
-boardID = 1
+boardID = 0
 x_squares = 7
 y_squares = 7
 squareLength = 0.053
@@ -197,7 +197,7 @@ def main():
     parser.add_argument('--output-dir', default="outputs/charuco_detection", type=str, help='output path')
     parser.add_argument('--save', action="store_true", help='save flag')
     parser.add_argument('--save-all', action="store_true", help='save all frames flag')
-    parser.add_argument('--camera-params', type=str, default="intrinsics_prettified.xml", help='path to camera calibration file')
+    parser.add_argument('--camera-params', type=str, default="utils/intrinsics.xml", help='path to camera calibration file')
     parser.add_argument('--draw-marker-corners', action="store_true", default=True, help='draw marker corners')
     parser.add_argument('--draw-charuco-corners', action="store_true", default=True, help='draw charuco corners')
     parser.add_argument('--show-ids', action="store_true", default=False, help='show corner IDs')

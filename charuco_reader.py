@@ -4,7 +4,7 @@ import cv2
 import argparse 
 import numpy as np
 
-from utils.utils import load_camera_params, save_frame
+from utils import util
 
 
 SS = (640, 360)
@@ -13,20 +13,21 @@ HD = (1280, 720)
 FHD = (1920, 1080)
 UHD = (3840, 2160)
 
+
 # -------------------------------------------
 # CONFIGURATION
 # -------------------------------------------
 boardID = 0
 x_squares = 7
-y_squares = 7
-# squareLength = 0.053
-# markerLength = 0.039
-squareLength = 0.04
-markerLength = 0.03
+y_squares = 5
+squareLength = 0.12                 # in meters
+markerLength = squareLength * 0.75  # in meters with 75% of the square length
 
 size = (x_squares, y_squares)
-step = int(x_squares * y_squares / 2.0)
-ids = np.array(range(boardID*step, (boardID+1)*step), dtype=np.int32)
+markers_per_board = int(x_squares * y_squares / 2.0)
+start = boardID * markers_per_board
+stop = (boardID + 1) * markers_per_board
+ids = np.array(range(start, stop), dtype=np.int32)
 
 # Define the dictionary and board parameters
 aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_6X6_1000)
@@ -69,6 +70,21 @@ charuco_detector = cv2.aruco.CharucoDetector(board,
                                              charucoParams=charuco_params)
 
 
+# Prepare object points (3D points in real-world space)
+objp = np.zeros((x_squares * y_squares, 3), np.float32)
+objp[:, :2] = np.mgrid[0:x_squares, 0:y_squares].T.reshape(-1, 2)
+objp *= squareLength     # Scale according to real square size
+objpoint = objp.astype(np.float32).reshape(-1, 1, 3)
+
+# Auxiliary camera pose relative to origin camera pose
+pose_matrix = np.array([
+    [-0.99604347062072573,  -0.078366409130313411,  0.041905972770475794,   -0.29179406479883679    ],
+    [-0.020389427994994425, 0.66050204336743168,    0.75054734822893399,    -0.84698754658494668    ],
+    [-0.086496681207179654, 0.74672334678076591,    -0.65948659388396635,   1.6650489727770146      ],
+    [0.,                    0.,                     0.,                     1.                      ],
+])
+
+
 def process_frame(args, frame):
     # Convert to grayscale
     gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -97,7 +113,7 @@ def process_frame(args, frame):
     if not (args.camera_params and os.path.isfile(args.camera_params)):
         return
     
-    camera_matrix, dist_coeffs = load_camera_params(args.camera_params)
+    camera_matrix, dist_coeffs = util.load_camera_params(args.camera_params)
     if (camera_matrix is None) or (charuco_corners is None) or len(charuco_corners) < 4:
         return
 
@@ -113,12 +129,22 @@ def process_frame(args, frame):
     # Ensure rvec and tvec are properly formatted
     rvec = np.array(rvec, dtype=np.float32)
     tvec = np.array(tvec, dtype=np.float32)
-
+    
     # Draw the axes
     cv2.drawFrameAxes(frame, camera_matrix, dist_coeffs, rvec, tvec, 0.1)
+    
+    # Project 3D points to image plane
+    imgpoints_proj = util.project_points_to_image(objpoint, rvec, tvec, camera_matrix, dist_coeffs)
+
+    # Draw projected points
+    for imgpoint in imgpoints_proj:
+        cv2.circle(frame, (int(imgpoint[0]), int(imgpoint[1])), 5, (0, 0, 255), -1)
+
+    # # Verify 3D consistency from moving one camera coordinate system to another
+    # util.verify_consistency_3Dobjpoints(objpoint, pose_matrix, size, squareLength)
 
 
-def run_pipeline(args, freeze=1, resolution=FHD, frame_name="Charuco Detection"):
+def run_pipeline(args, freeze=1, resolution=FHD, winname="Charuco Detection"):
     # Check if input is an image file
     if os.path.isfile(args.index) and args.index.lower().endswith(('.png', '.jpg', '.jpeg')):
         # Read image from file
@@ -129,11 +155,14 @@ def run_pipeline(args, freeze=1, resolution=FHD, frame_name="Charuco Detection")
             return
         
         # Create a window named 'Frame'
-        cv2.namedWindow(frame_name, cv2.WINDOW_NORMAL)
-        cv2.resizeWindow(frame_name, width=HD[0], height=HD[1])
+        cv2.namedWindow(winname, cv2.WINDOW_NORMAL)
+        cv2.resizeWindow(winname, width=HD[0], height=HD[1])
     
         # Process single image
-        process_frame(args, frame, frame_name)
+        process_frame(args, frame)
+        
+        # Show a frame
+        cv2.imshow(winname, frame)
         cv2.waitKey(0)
     else:
         # Process video/camera feed
@@ -149,8 +178,8 @@ def run_pipeline(args, freeze=1, resolution=FHD, frame_name="Charuco Detection")
             return
         
         # Create a window named 'Frame'
-        cv2.namedWindow(frame_name, cv2.WINDOW_NORMAL)
-        cv2.resizeWindow(frame_name, width=HD[0], height=HD[1])
+        cv2.namedWindow(winname, cv2.WINDOW_NORMAL)
+        cv2.resizeWindow(winname, width=HD[0], height=HD[1])
         
         # For recording
         if args.save_all:
@@ -166,7 +195,7 @@ def run_pipeline(args, freeze=1, resolution=FHD, frame_name="Charuco Detection")
             
             if not success:
                 break
-        
+            
             # Save original frame
             frame = original.copy()
             
@@ -174,7 +203,7 @@ def run_pipeline(args, freeze=1, resolution=FHD, frame_name="Charuco Detection")
             process_frame(args, frame)
             
             # Show a frame
-            cv2.imshow(frame_name, frame)
+            cv2.imshow(winname, frame)
         
             # Get a key
             key = cv2.waitKey(freeze) & 0xFF
@@ -185,7 +214,7 @@ def run_pipeline(args, freeze=1, resolution=FHD, frame_name="Charuco Detection")
                 freeze = 0 if freeze else 1
             # Save images
             elif (key == ord('s') and args.save) or args.save_all:
-                save_frame(original, args.output_dir, frame_id, annotated=frame)
+                util.save_frame(original, args.output_dir, frame_id, annotated=frame)
                 frame_id += 1
             
         # Destroy all the windows
@@ -194,14 +223,16 @@ def run_pipeline(args, freeze=1, resolution=FHD, frame_name="Charuco Detection")
 
 
 def main():
+    path = "assets/000000.png"
+    
     parser = argparse.ArgumentParser()
     parser.add_argument('--index', default=2, type=str, help='camera index, video file path, or image path')
     parser.add_argument('--output-dir', default="outputs/charuco_detection", type=str, help='output path')
     parser.add_argument('--save', action="store_true", help='save flag')
     parser.add_argument('--save-all', action="store_true", help='save all frames flag')
-    parser.add_argument('--camera-params', type=str, default="utils/intrinsics.xml", help='path to camera calibration file')
-    parser.add_argument('--draw-marker-corners', action="store_true", default=True, help='draw marker corners')
-    parser.add_argument('--draw-charuco-corners', action="store_true", default=True, help='draw charuco corners')
+    parser.add_argument('--camera-params', type=str, default="assets/intrinsics.xml", help='path to camera calibration file')
+    parser.add_argument('--draw-marker-corners', action="store_true", default=False, help='draw marker corners')
+    parser.add_argument('--draw-charuco-corners', action="store_true", default=False, help='draw charuco corners')
     parser.add_argument('--show-ids', action="store_true", default=False, help='show corner IDs')
     args = parser.parse_args()
 

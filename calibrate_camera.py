@@ -9,7 +9,6 @@ import logging
 from typing import Tuple, Optional
 
 import cv2
-import numpy as np
 
 from calibration import CameraCalibrator
 from charuco_detector import CharucoDetector
@@ -256,7 +255,7 @@ def main() -> None:
     generate_parser = subparsers.add_parser('generate', help='Generate Charuco board image')
     generate_parser.add_argument('--output-file', type=str, default='charuco_board.png', help='Output file for board image')
     generate_parser.add_argument('--pixels-per-square', type=int, default=100, help='Pixels per square')
-    generate_parser.add_argument('--margin', type=int, default=10, help='Margin around the board in pixels')
+    generate_parser.add_argument('--margin-percent', type=float, default=0.1, help='Margin around the board as a percentage (0.1 = 10%) of the minimum grid dimension')
 
     args = parser.parse_args()
 
@@ -287,7 +286,9 @@ def main() -> None:
             test_calibration(args, calibrator)
 
     elif args.mode == 'generate':
-        if detector.save_board_image(args.output_file, args.pixels_per_square, args.margin):
+        if detector.save_board_image(args.output_file,
+                                     pixels_per_square=args.pixels_per_square,
+                                     margin_percent=args.margin_percent):
             logger.info(f"Charuco board saved to {args.output_file}")
         else:
             logger.error("Failed to save Charuco board")

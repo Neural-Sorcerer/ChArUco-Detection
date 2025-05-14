@@ -222,6 +222,7 @@ def main() -> None:
     parser.add_argument('--generate-board', action="store_true", default=False, help='generate and save a Charuco board image')
     parser.add_argument('--board-output', type=str, default="outputs/charuco_board.png", help='path to save generated board')
     parser.add_argument('--pixels-per-square', type=int, default=300, help='pixels per square for generated board')
+    parser.add_argument('--margin-percent', type=float, default=0.1, help='margin around the board as a percentage (0.1 = 10%) of the minimum grid dimension')
     args = parser.parse_args()
 
     # Create configurations
@@ -238,7 +239,9 @@ def main() -> None:
 
     # Generate and save board if requested
     if args.generate_board:
-        detector.save_board_image(args.board_output, pixels_per_square=args.pixels_per_square)
+        detector.save_board_image(args.board_output,
+                                  pixels_per_square=args.pixels_per_square,
+                                  margin_percent=args.margin_percent)
 
     # Run the pipeline
     run_pipeline(args, detector)

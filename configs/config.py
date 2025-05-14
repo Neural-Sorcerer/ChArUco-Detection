@@ -22,7 +22,7 @@ class Resolution:
 @dataclass
 class CharucoBoardConfig:
     """Configuration for Charuco board."""
-    board_id: int = 1
+    board_id: int = 0
     x_squares: int = 7
     y_squares: int = 5
     square_length: float = 0.12             # in meters

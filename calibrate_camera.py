@@ -210,7 +210,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Camera calibration using Charuco boards")
 
     # Common arguments
-    parser.add_argument('--board-id', type=int, default=1, help='Charuco board ID')
+    parser.add_argument('--board-id', type=int, default=0, help='Charuco board ID')
     parser.add_argument('--x-squares', type=int, default=7, help='Number of squares in X direction')
     parser.add_argument('--y-squares', type=int, default=5, help='Number of squares in Y direction')
     parser.add_argument('--square-length', type=float, default=0.12, help='Square length in meters')
@@ -267,12 +267,9 @@ def main() -> None:
             test_calibration(args, calibrator)
 
     elif args.mode == 'generate':
-        if detector.save_board_image(args.output_file,
-                                     pixels_per_square=args.pixels_per_square,
-                                     margin_percent=args.margin_percent):
-            logger.info(f"Charuco board saved to {args.output_file}")
-        else:
-            logger.error("Failed to save Charuco board")
+        detector.save_board_image(args.output_file,
+                                  pixels_per_square=args.pixels_per_square,
+                                  margin_percent=args.margin_percent)
 
     else:
         parser.print_help()

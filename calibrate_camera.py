@@ -219,6 +219,12 @@ def main() -> None:
     # Subparsers for different modes
     subparsers = parser.add_subparsers(dest='mode', help='Operation mode')
 
+    # Generate board mode
+    generate_parser = subparsers.add_parser('generate', help='Generate Charuco board image')
+    generate_parser.add_argument('--output-file', type=str, default='charuco_board.png', help='Output file for board image')
+    generate_parser.add_argument('--pixels-per-square', type=int, default=300, help='Pixels per square')
+    generate_parser.add_argument('--margin-percent', type=float, default=0.05, help='Margin around the board as a percentage (0.05 = 5%) of the minimum grid dimension')
+
     # Collect mode
     collect_parser = subparsers.add_parser('collect', help='Collect calibration images')
     collect_parser.add_argument('--index', type=str, default="2", help='Camera index or video file path')
@@ -231,12 +237,6 @@ def main() -> None:
     calibrate_parser.add_argument('--pattern', type=str, default='*.png', help='File pattern for calibration images')
     calibrate_parser.add_argument('--output-file', type=str, default='calibration.xml', help='Output file for calibration parameters')
     calibrate_parser.add_argument('--test', action='store_true', help='Test calibration by undistorting images')
-
-    # Generate board mode
-    generate_parser = subparsers.add_parser('generate', help='Generate Charuco board image')
-    generate_parser.add_argument('--output-file', type=str, default='charuco_board.png', help='Output file for board image')
-    generate_parser.add_argument('--pixels-per-square', type=int, default=300, help='Pixels per square')
-    generate_parser.add_argument('--margin-percent', type=float, default=0.05, help='Margin around the board as a percentage (0.05 = 5%) of the minimum grid dimension')
 
     args = parser.parse_args()
 

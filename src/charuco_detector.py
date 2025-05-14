@@ -296,8 +296,10 @@ class CharucoDetector:
             board_img = self.generate_board_image(pixels_per_square, margin_percent, border_bits)
 
             # Create directory if it doesn't exist
-            os.makedirs(os.path.dirname(output_path), exist_ok=True)
-
+            dir_path = os.path.dirname(output_path)
+            if dir_path:  # Only create directory if path contains a directory
+                os.makedirs(dir_path, exist_ok=True)
+                
             # Save image
             cv2.imwrite(output_path, board_img)
             logging.info(f"Saved Charuco board image to {output_path}")

@@ -23,11 +23,9 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def collect_calibration_images(
-    args: argparse.Namespace,
-    detector: CharucoDetector,
-    resolution: Tuple[int, int] = Resolution.FHD
-) -> None:
+def collect_calibration_images(args: argparse.Namespace,
+                               detector: CharucoDetector,
+                               resolution: Tuple[int, int] = Resolution.FHD) -> None:
     """Collect calibration images from a camera.
 
     Args:
@@ -39,19 +37,19 @@ def collect_calibration_images(
     os.makedirs(args.output_dir, exist_ok=True)
 
     # Open camera or video file
-    if isinstance(args.camera_index, int):
+    if args.index.isdigit():
         # If it's an integer, it's a camera index
-        cap = cv2.VideoCapture(args.camera_index, cv2.CAP_V4L2)
+        cap = cv2.VideoCapture(int(args.index), cv2.CAP_V4L2)
         cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
         cap.set(cv2.CAP_PROP_FRAME_WIDTH, resolution[0])
         cap.set(cv2.CAP_PROP_FRAME_HEIGHT, resolution[1])
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
     else:
         # If it's a string, it's a video file path
-        cap = cv2.VideoCapture(args.camera_index)
+        cap = cv2.VideoCapture(args.index)
 
     if not cap.isOpened():
-        logger.error(f"Cannot open camera {args.camera_index}")
+        logger.error(f"Cannot open camera {args.index}")
         return
 
     # Create window
@@ -206,23 +204,6 @@ def test_calibration(args: argparse.Namespace, calibrator: CameraCalibrator) -> 
     logger.info(f"Undistorted images saved to {undistort_dir}")
 
 
-def parse_index(value):
-    """Parse the index argument which can be either an integer (camera index) or a string (file path).
-
-    Args:
-        value: The command-line argument value
-
-    Returns:
-        int or str: Camera index as int or file path as string
-    """
-    try:
-        # Try to convert to integer (camera index)
-        return int(value)
-    except ValueError:
-        # If conversion fails, treat as a string (file path)
-        return value
-
-
 def main() -> None:
     """Main function."""
     # Parse command-line arguments
@@ -240,7 +221,7 @@ def main() -> None:
 
     # Collect mode
     collect_parser = subparsers.add_parser('collect', help='Collect calibration images')
-    collect_parser.add_argument('--camera-index', type=parse_index, default=0, help='Camera index or video file path')
+    collect_parser.add_argument('--camera-index', type=str, default=0, help='Camera index or video file path')
     collect_parser.add_argument('--output-dir', type=str, default='calibration_images', help='Output directory for calibration images')
     collect_parser.add_argument('--resolution', type=str, default='FHD', choices=['SS', 'SD', 'HD', 'FHD', 'UHD'], help='Camera resolution')
 
@@ -255,7 +236,7 @@ def main() -> None:
     generate_parser = subparsers.add_parser('generate', help='Generate Charuco board image')
     generate_parser.add_argument('--output-file', type=str, default='charuco_board.png', help='Output file for board image')
     generate_parser.add_argument('--pixels-per-square', type=int, default=100, help='Pixels per square')
-    generate_parser.add_argument('--margin-percent', type=float, default=0.1, help='Margin around the board as a percentage (0.1 = 10%) of the minimum grid dimension')
+    generate_parser.add_argument('--margin-percent', type=float, default=0.05, help='Margin around the board as a percentage (0.05 = 5%) of the minimum grid dimension')
 
     args = parser.parse_args()
 

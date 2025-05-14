@@ -70,6 +70,7 @@ def process_frame(detector: CharucoDetector,
     # Draw axes
     detector.draw_axes(frame, rvec, tvec)
 
+    # Project 3D points to image plane
     if project_points:
         detector.project_points(frame, rvec, tvec)
 
@@ -222,7 +223,7 @@ def main() -> None:
     parser.add_argument('--generate-board', action="store_true", default=False, help='generate and save a Charuco board image')
     parser.add_argument('--board-output', type=str, default="outputs/charuco_board.png", help='path to save generated board')
     parser.add_argument('--pixels-per-square', type=int, default=300, help='pixels per square for generated board')
-    parser.add_argument('--margin-percent', type=float, default=0.1, help='margin around the board as a percentage (0.1 = 10%) of the minimum grid dimension')
+    parser.add_argument('--margin-percent', type=float, default=0.05, help='margin around the board as a percentage (0.05 = 5%) of the minimum grid dimension')
     args = parser.parse_args()
 
     # Create configurations

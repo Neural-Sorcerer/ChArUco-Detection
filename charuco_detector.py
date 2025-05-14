@@ -247,13 +247,13 @@ class CharucoDetector:
 
     def generate_board_image(self,
                              pixels_per_square: int = 100,
-                             margin_percent: float = 0.1,
+                             margin_percent: float = 0.05,
                              border_bits: int = 1) -> np.ndarray:
         """Generate an image of the Charuco board.
 
         Args:
             pixels_per_square: Number of pixels per square
-            margin_percent: Margin around the board as a percentage (0.1 = 10%) of the minimum grid dimension
+            margin_percent: Margin around the board as a percentage (0.05 = 5%) of the minimum grid dimension
             border_bits: Width of marker borders
 
         Returns:
@@ -278,14 +278,14 @@ class CharucoDetector:
     def save_board_image(self,
                          output_path: str,
                          pixels_per_square: int = 300,
-                         margin_percent: float = 0.1,
+                         margin_percent: float = 0.05,
                          border_bits: int = 1) -> bool:
         """Generate and save an image of the Charuco board.
 
         Args:
             output_path: Path to save the board image
             pixels_per_square: Number of pixels per square
-            margin_percent: Margin around the board as a percentage (0.1 = 10%) of the minimum grid dimension
+            margin_percent: Margin around the board as a percentage (0.05 = 5%) of the minimum grid dimension
             border_bits: Width of marker borders
 
         Returns:

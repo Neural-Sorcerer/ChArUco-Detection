@@ -17,7 +17,7 @@ UHD = (3840, 2160)
 # -------------------------------------------
 # CONFIGURATION
 # -------------------------------------------
-boardID = 0
+boardID = 1
 x_squares = 7
 y_squares = 5
 squareLength = 0.12                 # in meters
@@ -84,6 +84,9 @@ pose_matrix = np.array([
     [0.,                    0.,                     0.,                     1.                      ],
 ])
 
+# -------------------------------------------
+# -------------------------------------------
+
 
 def process_frame(args, frame):
     # Convert to grayscale
@@ -133,15 +136,17 @@ def process_frame(args, frame):
     # Draw the axes
     cv2.drawFrameAxes(frame, camera_matrix, dist_coeffs, rvec, tvec, 0.1)
     
-    # Project 3D points to image plane
-    imgpoints_proj = util.project_points_to_image(objpoint, rvec, tvec, camera_matrix, dist_coeffs)
+    if args.project_points:
+        # Project 3D points to image plane
+        imgpoints_proj = util.project_points_to_image(objpoint, rvec, tvec, camera_matrix, dist_coeffs)
 
-    # Draw projected points
-    for imgpoint in imgpoints_proj:
-        cv2.circle(frame, (int(imgpoint[0]), int(imgpoint[1])), 5, (0, 0, 255), -1)
+        # Draw projected points
+        for imgpoint in imgpoints_proj:
+            cv2.circle(frame, (int(imgpoint[0]), int(imgpoint[1])), 5, (0, 0, 255), -1)
 
-    # # Verify 3D consistency from moving one camera coordinate system to another
-    # util.verify_consistency_3Dobjpoints(objpoint, pose_matrix, size, squareLength)
+    if args.evaluate_3d:
+        # Verify 3D consistency from moving one camera coordinate system to another
+        util.verify_consistency_3Dobjpoints(objpoint, pose_matrix, size, squareLength)
 
 
 def run_pipeline(args, freeze=1, resolution=FHD, winname="Charuco Detection"):
@@ -223,17 +228,19 @@ def run_pipeline(args, freeze=1, resolution=FHD, winname="Charuco Detection"):
 
 
 def main():
-    path = "assets/000000.png"
+    path = "assets/sample.png"
     
     parser = argparse.ArgumentParser()
-    parser.add_argument('--index', default=2, type=str, help='camera index, video file path, or image path')
+    parser.add_argument('--index', default=path, type=str, help='camera index, video file path, or image path')
     parser.add_argument('--output-dir', default="outputs/charuco_detection", type=str, help='output path')
     parser.add_argument('--save', action="store_true", help='save flag')
     parser.add_argument('--save-all', action="store_true", help='save all frames flag')
     parser.add_argument('--camera-params', type=str, default="assets/intrinsics.xml", help='path to camera calibration file')
-    parser.add_argument('--draw-marker-corners', action="store_true", default=False, help='draw marker corners')
-    parser.add_argument('--draw-charuco-corners', action="store_true", default=False, help='draw charuco corners')
+    parser.add_argument('--draw-marker-corners', action="store_true", default=True, help='draw marker corners')
+    parser.add_argument('--draw-charuco-corners', action="store_true", default=True, help='draw charuco corners')
     parser.add_argument('--show-ids', action="store_true", default=False, help='show corner IDs')
+    parser.add_argument('--project-points', action="store_true", default=False, help='project 3D points to image plane')
+    parser.add_argument('--evaluate-3d', action="store_true", default=False, help='evaluate 3D consistency')
     args = parser.parse_args()
 
     run_pipeline(args)

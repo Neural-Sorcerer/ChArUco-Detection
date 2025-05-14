@@ -12,7 +12,7 @@ import cv2
 import numpy as np
 
 from utils import util
-from config import CharucoBoardConfig, DetectorConfig, CharucoDetectorConfig
+from configs.config import CharucoBoardConfig, DetectorConfig, CharucoDetectorConfig
 
 
 class CharucoDetector:
@@ -246,7 +246,7 @@ class CharucoDetector:
             cv2.circle(frame, (int(imgpoint[0]), int(imgpoint[1])), radius, color, -1)
 
     def generate_board_image(self,
-                             pixels_per_square: int = 100,
+                             pixels_per_square: int = 300,
                              margin_percent: float = 0.05,
                              border_bits: int = 1) -> np.ndarray:
         """Generate an image of the Charuco board.

@@ -13,8 +13,8 @@ from typing import Tuple, List, Dict, Optional, Any, Union
 import cv2
 import numpy as np
 
-from config import CharucoBoardConfig
-from charuco_detector import CharucoDetector
+from configs.config import CharucoBoardConfig
+from src.charuco_detector import CharucoDetector
 
 
 class CameraCalibrator:

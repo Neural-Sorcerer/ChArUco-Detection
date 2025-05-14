@@ -10,9 +10,9 @@ from typing import Tuple, Optional
 
 import cv2
 
-from calibration import CameraCalibrator
-from charuco_detector import CharucoDetector
-from config import Resolution, CharucoBoardConfig, DetectorConfig, CharucoDetectorConfig
+from src.calibration import CameraCalibrator
+from src.charuco_detector import CharucoDetector
+from configs.config import Resolution, CharucoBoardConfig, DetectorConfig, CharucoDetectorConfig
 
 
 # Configure logging
@@ -221,7 +221,7 @@ def main() -> None:
 
     # Collect mode
     collect_parser = subparsers.add_parser('collect', help='Collect calibration images')
-    collect_parser.add_argument('--camera-index', type=str, default=0, help='Camera index or video file path')
+    collect_parser.add_argument('--index', type=str, default="2", help='Camera index or video file path')
     collect_parser.add_argument('--output-dir', type=str, default='calibration_images', help='Output directory for calibration images')
     collect_parser.add_argument('--resolution', type=str, default='FHD', choices=['SS', 'SD', 'HD', 'FHD', 'UHD'], help='Camera resolution')
 
@@ -235,7 +235,7 @@ def main() -> None:
     # Generate board mode
     generate_parser = subparsers.add_parser('generate', help='Generate Charuco board image')
     generate_parser.add_argument('--output-file', type=str, default='charuco_board.png', help='Output file for board image')
-    generate_parser.add_argument('--pixels-per-square', type=int, default=100, help='Pixels per square')
+    generate_parser.add_argument('--pixels-per-square', type=int, default=300, help='Pixels per square')
     generate_parser.add_argument('--margin-percent', type=float, default=0.05, help='Margin around the board as a percentage (0.05 = 5%) of the minimum grid dimension')
 
     args = parser.parse_args()

@@ -12,8 +12,8 @@ import cv2
 import numpy as np
 
 from utils import util
-from charuco_detector import CharucoDetector
-from config import Resolution, CharucoBoardConfig, DetectorConfig, CharucoDetectorConfig
+from src.charuco_detector import CharucoDetector
+from configs.config import Resolution, CharucoBoardConfig, DetectorConfig, CharucoDetectorConfig
 
 
 # Configure logging
@@ -220,10 +220,6 @@ def main() -> None:
     parser.add_argument('--show-ids', action="store_true", default=False, help='show corner IDs')
     parser.add_argument('--project-points', action="store_true", default=False, help='project 3D points to image plane')
     parser.add_argument('--evaluate-3d', action="store_true", default=False, help='evaluate 3D consistency')
-    parser.add_argument('--generate-board', action="store_true", default=False, help='generate and save a Charuco board image')
-    parser.add_argument('--board-output', type=str, default="outputs/charuco_board.png", help='path to save generated board')
-    parser.add_argument('--pixels-per-square', type=int, default=300, help='pixels per square for generated board')
-    parser.add_argument('--margin-percent', type=float, default=0.05, help='margin around the board as a percentage (0.05 = 5%) of the minimum grid dimension')
     args = parser.parse_args()
 
     # Create configurations
@@ -237,12 +233,6 @@ def main() -> None:
     # Load camera parameters if provided
     if args.camera_params and os.path.isfile(args.camera_params):
         detector.load_camera_params(args.camera_params)
-
-    # Generate and save board if requested
-    if args.generate_board:
-        detector.save_board_image(args.board_output,
-                                  pixels_per_square=args.pixels_per_square,
-                                  margin_percent=args.margin_percent)
 
     # Run the pipeline
     run_pipeline(args, detector)

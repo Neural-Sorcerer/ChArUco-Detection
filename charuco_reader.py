@@ -3,14 +3,17 @@
 This module provides functionality for detecting Charuco boards in images and videos,
 visualizing the results, and saving the data for camera calibration.
 """
+# === Standard Libraries ===
 import os
 import argparse
 import logging
 from typing import Tuple, Dict, List, Optional, Any, Union
 
+# === Third-Party Libraries ===
 import cv2
 import numpy as np
 
+# === Local Modules ===
 from utils import util
 from src.charuco_detector import CharucoDetector
 from configs.config import Resolution, CharucoBoardConfig, DetectorConfig, CharucoDetectorConfig
@@ -112,7 +115,7 @@ def run_pipeline(args: argparse.Namespace,
         frame = cv2.imread(args.index)
 
         if frame is None:
-            logger.error(f"Cannot open image {args.index}")
+            logger.error(f"❌ Cannot open image {args.index}")
             return
 
         # Create a window
@@ -147,7 +150,7 @@ def run_pipeline(args: argparse.Namespace,
             cap = cv2.VideoCapture(args.index)
 
         if not cap.isOpened():
-            logger.error(f"Cannot open camera {args.index}")
+            logger.error(f"❌ Cannot open camera {args.index}")
             return
 
         # Create a window

@@ -1,6 +1,7 @@
 # Custom
 Cam_001/
-outputs/
+outputs*/
+calibration_images*/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

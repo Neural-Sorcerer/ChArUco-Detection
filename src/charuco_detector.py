@@ -3,14 +3,17 @@
 This module provides a class for detecting Charuco boards in images and videos,
 as well as visualizing the results.
 """
+# === Standard Libraries ===
 import os
 import logging
 import xml.etree.ElementTree as ET
 from typing import Tuple, Dict, List, Optional, Any, Union
 
+# === Third-Party Libraries ===
 import cv2
 import numpy as np
 
+# === Local Modules ===
 from utils import util
 from configs.config import CharucoBoardConfig, DetectorConfig, CharucoDetectorConfig
 
@@ -83,7 +86,7 @@ class CharucoDetector:
             self.camera_matrix, self.dist_coeffs = util.load_camera_params(file_path)
             return True
         except (FileNotFoundError, ET.ParseError, ValueError) as e:
-            logging.error(f"Failed to load camera parameters: {str(e)}")
+            logging.error(f"❌ Failed to load camera parameters: {str(e)}")
             return False
 
     def detect_board(self, frame: np.ndarray) -> Tuple[Optional[np.ndarray],
@@ -113,7 +116,7 @@ class CharucoDetector:
             charuco_corners, charuco_ids, marker_corners, marker_ids = self.detector.detectBoard(gray)
             return charuco_corners, charuco_ids, marker_corners, marker_ids
         except Exception as e:
-            logging.error(f"Error detecting Charuco board: {str(e)}")
+            logging.error(f"❌ Error detecting Charuco board: {str(e)}")
             return None, None, None, None
 
     def draw_detected_markers(self,
@@ -145,7 +148,7 @@ class CharucoDetector:
             charuco_ids: IDs of detected Charuco corners
             color: Color to draw corners (BGR)
         """
-        if charuco_corners is not None and len(charuco_corners) > 0:
+        if (charuco_corners is not None) and (len(charuco_corners) > 0):
             cv2.aruco.drawDetectedCornersCharuco(frame, charuco_corners, charuco_ids, cornerColor=color)
 
     def draw_corner_ids(self,
@@ -165,11 +168,17 @@ class CharucoDetector:
             color: Color to draw text (BGR)
             thickness: Thickness of text
         """
-        if charuco_corners is not None and charuco_ids is not None:
+        if (charuco_corners is not None) and (charuco_ids is not None):
             for corner, corner_id in zip(charuco_corners, charuco_ids.flatten()):
-                pos = (int(corner[0][0]), int(corner[0][1]))
-                cv2.putText(frame, str(corner_id), pos, cv2.FONT_HERSHEY_SIMPLEX,
-                            font_scale, color, thickness, cv2.LINE_AA)
+                org = (int(corner[0][0]), int(corner[0][1]))
+                cv2.putText(frame,
+                            str(corner_id),
+                            org,
+                            cv2.FONT_HERSHEY_SIMPLEX,
+                            font_scale,
+                            color,
+                            thickness,
+                            cv2.LINE_AA)
 
     def estimate_pose(self,
                       charuco_corners: np.ndarray,
@@ -187,14 +196,24 @@ class CharucoDetector:
                 - rvec: Rotation vector (None if estimation failed)
                 - tvec: Translation vector (None if estimation failed)
         """
-        if ((self.camera_matrix is None) or (self.dist_coeffs is None) or
-            (charuco_corners is None) or (charuco_ids is None) or len(charuco_corners) < 4):
+        if (
+            (self.camera_matrix is None) or
+            (self.dist_coeffs is None) or
+            (charuco_corners is None) or
+            (charuco_ids is None) or
+            (len(charuco_corners) < 4)
+        ):
             return False, None, None
 
         try:
             ret, rvec, tvec = cv2.aruco.estimatePoseCharucoBoard(
-                charuco_corners, charuco_ids, self.board_config.board,
-                self.camera_matrix, self.dist_coeffs, None, None
+                charuco_corners,
+                charuco_ids,
+                self.board_config.board,
+                self.camera_matrix,
+                self.dist_coeffs,
+                None,
+                None
             )
 
             if ret:
@@ -204,7 +223,7 @@ class CharucoDetector:
             else:
                 return False, None, None
         except Exception as e:
-            logging.error(f"Error estimating pose: {str(e)}")
+            logging.error(f"❌ Error estimating pose: {str(e)}")
             return False, None, None
 
     def draw_axes(self,
@@ -302,8 +321,8 @@ class CharucoDetector:
                 
             # Save image
             cv2.imwrite(output_path, board_img)
-            logging.info(f"Saved Charuco board image to {output_path}")
+            logging.info(f"✅ Saved Charuco board image to {output_path}")
             return True
         except Exception as e:
-            logging.error(f"Error saving board image: {str(e)}")
+            logging.error(f"❌ Error saving board image: {str(e)}")
             return False

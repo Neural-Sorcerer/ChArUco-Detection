@@ -3,9 +3,11 @@
 This module contains all configuration parameters for the Charuco detection pipeline,
 including board specifications, camera settings, and detector parameters.
 """
+# === Standard Libraries ===
 from dataclasses import dataclass
 from typing import Tuple, Dict, Any, Optional
 
+# === Third-Party Libraries ===
 import cv2
 import numpy as np
 
@@ -17,6 +19,7 @@ class Resolution:
     HD: Tuple[int, int] = (1280, 720)   # High Definition
     FHD: Tuple[int, int] = (1920, 1080) # Full HD
     UHD: Tuple[int, int] = (3840, 2160) # Ultra HD (4K)
+    OMS: Tuple[int, int] = (2592, 1800) # FishEye (5MP)
 
 
 @dataclass

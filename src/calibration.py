@@ -4,29 +4,33 @@ This module provides functionality for calibrating cameras using Charuco boards.
 It includes functions for collecting calibration data, performing calibration,
 and saving/loading calibration parameters.
 """
+# === Standard Libraries ===
 import os
 import glob
 import logging
 import xml.etree.ElementTree as ET
 from typing import Tuple, List, Dict, Optional, Any, Union
 
+# === Third-Party Libraries ===
 import cv2
 import numpy as np
 
-from configs.config import CharucoBoardConfig
+# === Local Modules ===
 from src.charuco_detector import CharucoDetector
 
 
 class CameraCalibrator:
     """Class for calibrating cameras using Charuco boards."""
 
-    def __init__(self, detector: CharucoDetector):
+    def __init__(self, detector: CharucoDetector, fisheye: bool = False):
         """Initialize the CameraCalibrator.
 
         Args:
             detector: CharucoDetector instance
+            fisheye: Whether to use fisheye camera model (default: False for pinhole)
         """
         self.detector = detector
+        self.fisheye = fisheye
         self.all_corners = []   # All detected corners
         self.all_ids = []       # All detected IDs
         self.image_size = None  # Image size (width, height)
@@ -54,7 +58,7 @@ class CameraCalibrator:
         if self.image_size is None:
             self.image_size = (image.shape[1], image.shape[0])
         elif self.image_size != (image.shape[1], image.shape[0]):
-            logging.warning("Image size does not match previous images. Skipping.")
+            logging.warning("⚠️ Image size does not match previous images. Skipping.")
             return False
 
         # Detect Charuco board
@@ -62,7 +66,7 @@ class CameraCalibrator:
 
         # Check if corners were detected
         if charuco_corners is None or len(charuco_corners) < 4:
-            logging.warning("Not enough corners detected in image.")
+            logging.warning("⚠️ Not enough corners detected in image.")
             return False
 
         # Add corners and IDs to lists
@@ -81,11 +85,13 @@ class CameraCalibrator:
         Returns:
             Number of images successfully added
         """
+        logging.info(f"⭐ ───────────── Adding Images for Calibration ───────────── ⭐")
+        
         # Get all image files in directory
         image_files = glob.glob(os.path.join(directory, pattern))
 
         if not image_files:
-            logging.warning(f"No images found in {directory} matching pattern {pattern}")
+            logging.warning(f"⚠️ No images found in {directory} matching pattern {pattern}")
             return 0
 
         # Add each image
@@ -95,13 +101,13 @@ class CameraCalibrator:
             image = cv2.imread(image_file)
 
             if image is None:
-                logging.warning(f"Could not read image {image_file}")
+                logging.warning(f"⚠️ Could not read image {image_file}")
                 continue
 
             if self.add_calibration_image(image):
                 count += 1
 
-        logging.info(f"Added {count} images for calibration")
+        logging.info(f"✅ Added {count} images for calibration")
         return count
 
     def calibrate(self) -> bool:
@@ -111,50 +117,113 @@ class CameraCalibrator:
             True if calibration was successful, False otherwise
         """
         if not self.all_corners or not self.all_ids:
-            logging.error("No calibration data available")
+            logging.error(f"❌ No calibration data available")
             return False
 
         if self.image_size is None:
-            logging.error("Image size not set")
+            logging.error(f"❌ Image size not set")
             return False
 
         # Prepare object points (3D points in real-world space)
         board = self.detector.board_config.board
 
-        # Perform calibration
-        flags = (
-            cv2.CALIB_RATIONAL_MODEL +      # Use rational model for distortion
-            cv2.CALIB_THIN_PRISM_MODEL +    # Add thin prism distortion
-            cv2.CALIB_TILTED_MODEL          # Add tilted sensor model
-        )
-        criteria = (cv2.TERM_CRITERIA_EPS & cv2.TERM_CRITERIA_COUNT, 10000, 1e-9)
+        # Prepare object points for fisheye calibration
+        objpoints = []
+        imgpoints = []
+        for corners, ids in zip(self.all_corners, self.all_ids):
+            if (corners is not None) and (ids is not None) and (len(corners) > 3):
+                # Get object points for detected corners
+                obj_pts, img_pts = board.matchImagePoints(corners, ids)
+                if obj_pts is not None and img_pts is not None:
+                    objpoints.append(obj_pts.reshape(-1, 1, 3))
+                    imgpoints.append(img_pts.reshape(-1, 1, 2))
 
+        if len(objpoints) < 3:
+            logging.error(f"❌ Not enough valid images for fisheye calibration")
+            return False
+        
         try:
-            (
-                self.reprojection_error,
-                self.camera_matrix,
-                self.dist_coeffs,
-                self.rvecs,
-                self.tvecs,
-                self.std_deviations_intrinsics,
-                self.std_deviations_extrinsics,
-                self.per_view_errors
-            ) = cv2.aruco.calibrateCameraCharucoExtended(
-                charucoCorners=self.all_corners,
-                charucoIds=self.all_ids,
-                board=board,
-                imageSize=self.image_size,
-                cameraMatrix=None,
-                distCoeffs=None,
-                flags=flags,
-                criteria=criteria
-            )
+            if self.fisheye:
+                # Fisheye calibration
+                logging.info(f"⭐ ───────────── Performing Fisheye Camera Calibration ───────────── ⭐")
+                
+                # Fisheye calibration flags
+                flags = (
+                    cv2.fisheye.CALIB_RECOMPUTE_EXTRINSIC +
+                    cv2.fisheye.CALIB_CHECK_COND +
+                    cv2.fisheye.CALIB_FIX_SKEW
+                )
+                criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 1e-6)
+                
+                # Initialize camera matrix for fisheye
+                K = np.eye(3)
+                D = np.zeros((4, 1))
+                
+                # Perform fisheye calibration
+                (
+                    self.reprojection_error,
+                    self.camera_matrix,
+                    self.dist_coeffs,
+                    self.rvecs,
+                    self.tvecs
+                ) = cv2.fisheye.calibrate(
+                    objectPoints=objpoints,
+                    imagePoints=imgpoints,
+                    image_size=self.image_size,
+                    K=K,
+                    D=D,
+                    rvecs=self.rvecs,
+                    tvecs=self.tvecs,
+                    flags=flags,
+                    criteria=criteria
+                )
 
-            logging.info(f"Calibration successful. Reprojection error: {self.reprojection_error}")
+                # Log it
+                cond_K = np.linalg.cond(self.camera_matrix)
+                logging.info(f"Condition number of camera matrix: {cond_K:.2e}")
+
+                # Check if it's in the range 1e6 to 1e8
+                if 1e6 <= cond_K <= 1e8:
+                    logging.warning("⚠️ Condition number is high - calibration may be unstable.")
+                elif cond_K > 1e8:
+                    logging.error(f"❌ Condition number is extremely high - calibration likely invalid.")
+                else:
+                    logging.info("✅ Condition number is within acceptable range.")
+    
+                logging.info(f"✅ Fisheye calibration successful.")
+
+            else:
+                # Pinhole calibration
+                logging.info(f"⭐ ───────────── Performing Pinhole Camera Calibration ───────────── ⭐")
+
+                # Pinhole calibration flags
+                flags = 0
+                criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 1e-6)
+        
+                (
+                    self.reprojection_error,
+                    self.camera_matrix,
+                    self.dist_coeffs,
+                    self.rvecs,
+                    self.tvecs
+                ) = cv2.calibrateCamera(
+                    objectPoints=objpoints,
+                    imagePoints=imgpoints,
+                    imageSize=self.image_size,
+                    cameraMatrix=self.camera_matrix,
+                    distCoeffs=self.dist_coeffs,
+                    rvecs=self.rvecs,
+                    tvecs=self.tvecs,
+                    flags=flags,
+                    criteria=criteria
+                )
+
+                logging.info(f"✅ Pinhole calibration successful.")
+
             return True
 
         except Exception as e:
-            logging.error(f"Calibration failed: {str(e)}")
+            logging.error(f"❌ Calibration failed: {str(e)}")
             return False
 
     def save_calibration(self, file_path: str) -> bool:
@@ -166,8 +235,8 @@ class CameraCalibrator:
         Returns:
             True if parameters were saved successfully, False otherwise
         """
-        if self.camera_matrix is None or self.dist_coeffs is None:
-            logging.error("No calibration data available")
+        if (self.camera_matrix is None) or (self.dist_coeffs is None):
+            logging.error(f"❌ No calibration data available")
             return False
 
         try:
@@ -188,8 +257,13 @@ class CameraCalibrator:
 
             # Add distortion coefficients
             dist_coeffs_elem = ET.SubElement(root, "distortion_coefficients")
-            for i, coeff in enumerate(self.dist_coeffs.flatten()):
+            dist_coeffs_flat = self.dist_coeffs.flatten()
+            for i, coeff in enumerate(dist_coeffs_flat):
                 ET.SubElement(dist_coeffs_elem, f"coeff_{i}").text = str(coeff)
+
+            # Add camera model type
+            ET.SubElement(root, "camera_model").text = "fisheye" if self.fisheye else "pinhole"
+            ET.SubElement(root, "num_distortion_coeffs").text = str(len(dist_coeffs_flat))
 
             # Add reprojection error
             ET.SubElement(root, "reprojection_error").text = str(self.reprojection_error)
@@ -224,11 +298,11 @@ class CameraCalibrator:
             # Write to file
             tree.write(file_path, encoding="utf-8", xml_declaration=True)
 
-            logging.info(f"Calibration parameters saved to {file_path}")
+            logging.info(f"✅ Calibration parameters saved to {file_path}")
             return True
 
         except Exception as e:
-            logging.error(f"Error saving calibration parameters: {str(e)}")
+            logging.error(f"❌ Error saving calibration parameters: {str(e)}")
             return False
 
     def get_calibration_metrics(self) -> Dict[str, Any]:
@@ -237,7 +311,7 @@ class CameraCalibrator:
         Returns:
             Dictionary containing calibration metrics
         """
-        if self.camera_matrix is None or self.dist_coeffs is None:
+        if (self.camera_matrix is None) or (self.dist_coeffs is None):
             return {"error": "No calibration data available"}
 
         metrics = {
@@ -249,6 +323,32 @@ class CameraCalibrator:
         }
 
         return metrics
+    
+    def show_calibration_metrics(self, metrics: Dict[str, Any]) -> bool:
+        """Show calibration metrics.
+
+        args:
+            metrics: Dictionary containing calibration metrics
+
+        Returns:
+            Treue if metrics were shown successfully, False otherwise
+        """
+        try:
+            logging.info(f"⭐ ───────────── Calibration Quality ───────────── ⭐")
+            for key, value in metrics.items():
+                if isinstance(value, list):
+                    result = f"{key}:\n{np.array(value)}"
+                else:
+                    result = f"{key}: {value}"
+                if "error" in key:
+                    result = f"{result} ⬅️"
+                logging.info(result)
+            return True
+        
+        except Exception as e:
+            logging.error(f"❌ Error showing calibration metrics: {str(e)}")
+            return False
+
 
     def undistort_image(self, image: np.ndarray) -> np.ndarray:
         """Undistort an image using calibration parameters.
@@ -259,24 +359,42 @@ class CameraCalibrator:
         Returns:
             Undistorted image
         """
-        if self.camera_matrix is None or self.dist_coeffs is None:
-            logging.error("No calibration data available")
+        if (self.camera_matrix is None) or (self.dist_coeffs is None):
+            logging.error(f"❌ No calibration data available")
             return image
 
-        # Get optimal new camera matrix
         h, w = image.shape[:2]
-        new_camera_matrix, roi = cv2.getOptimalNewCameraMatrix(
-            self.camera_matrix, self.dist_coeffs, (w, h), 1, (w, h)
-        )
 
-        # Undistort
-        undistorted = cv2.undistort(
-            image, self.camera_matrix, self.dist_coeffs, None, new_camera_matrix
-        )
+        if self.fisheye:
+            # Fisheye undistortion
+            # Get optimal new camera matrix for fisheye
+            new_camera_matrix = cv2.fisheye.estimateNewCameraMatrixForUndistortRectify(
+                self.camera_matrix, self.dist_coeffs, (w, h), np.eye(3), balance=1.0
+            )
 
-        # Crop the image
-        x, y, w, h = roi
-        if w > 0 and h > 0:
-            undistorted = undistorted[y:y+h, x:x+w]
+            # Create undistortion maps
+            map1, map2 = cv2.fisheye.initUndistortRectifyMap(
+                self.camera_matrix, self.dist_coeffs, np.eye(3), new_camera_matrix, (w, h), cv2.CV_16SC2
+            )
+
+            # Apply undistortion
+            undistorted = cv2.remap(image, map1, map2, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
+
+        else:
+            # Pinhole undistortion
+            # Get optimal new camera matrix
+            new_camera_matrix, roi = cv2.getOptimalNewCameraMatrix(
+                self.camera_matrix, self.dist_coeffs, (w, h), 1, (w, h)
+            )
+
+            # Undistort
+            undistorted = cv2.undistort(
+                image, self.camera_matrix, self.dist_coeffs, None, new_camera_matrix
+            )
+
+            # Crop the image
+            x, y, w, h = roi
+            if w > 0 and h > 0:
+                undistorted = undistorted[y:y+h, x:x+w]
 
         return undistorted

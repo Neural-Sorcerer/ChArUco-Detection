@@ -17,7 +17,7 @@ A comprehensive toolkit for Charuco board detection, visualization, and camera c
 ```bash
 conda create --name charuco python=3.11 -y
 conda activate charuco
-pip install opencv-contrib-python=4.11.0.86
+pip install opencv-contrib-python==4.11.0.86
 ```
 
 ## Project Structure
@@ -74,13 +74,13 @@ python charuco_reader.py --index 0 --camera-params assets/intrinsics.xml --proje
 2. Calibrate the camera:
 
     ```bash
-    python calibrate_camera.py calibrate --input-dir calibration_images --output-file calibration.xml
+    python calibrate_camera.py calibrate --input-dir calibration_images --output-file calibration.xml --fisheye
     ```
 
 3. Test the calibration:
 
     ```bash
-    python calibrate_camera.py calibrate --input-dir calibration_images --output-file calibration.xml --test
+    python calibrate_camera.py calibrate --input-dir calibration_images --output-file calibration.xml --fisheye --test
     ```
 
 ## Command-Line Arguments

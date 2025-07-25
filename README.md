@@ -42,19 +42,27 @@ python charuco_reader.py --index [camera_index|video_path|image_path]
 ### Save Frames
 
 ```bash
-python charuco_reader.py --index 0 --save --output-dir outputs
+python charuco_reader.py \
+    --index=0 \
+    --save \
+    --output-dir=outputs
 ```
 
 ### Show Charuco Corners
 
 ```bash
-python charuco_reader.py --index 0 --draw-charuco-corners
+python charuco_reader.py \
+    --index=0 \
+    --draw-charuco-corners
 ```
 
 ### Project 3D Points
 
 ```bash
-python charuco_reader.py --index 0 --camera-params assets/intrinsics.xml --project-points
+python charuco_reader.py \
+    --index=0 \
+    --camera-params=assets/intrinsics.xml \
+    --project-points
 ```
 
 ### Camera Calibration
@@ -62,25 +70,38 @@ python charuco_reader.py --index 0 --camera-params assets/intrinsics.xml --proje
 0. Generate a Charuco board image:
 
     ```bash
-    python calibrate_camera.py generate --output-file path/to/output.png --pixels-per-square 300 --margin-percent 0.05
+    python calibrate_camera.py generate \
+        --output-file=path/to/output.png \
+        --pixels-per-square=300 \
+        --margin-percent=0.05
     ```
 
 1. Collect calibration images:
 
     ```bash
-    python calibrate_camera.py collect --index 0 --output-dir calibration_images
+    python calibrate_camera.py collect \
+        --index=0 \
+        --output-dir=calibration_images
     ```
 
 2. Calibrate the camera:
 
     ```bash
-    python calibrate_camera.py calibrate --input-dir calibration_images --output-file calibration.xml --fisheye
+    python calibrate_camera.py calibrate \
+        --input-dir=calibration_images \
+        --output-file=calibration.xml \
+        --fisheye \
     ```
 
 3. Test the calibration:
 
     ```bash
-    python calibrate_camera.py calibrate --input-dir calibration_images --output-file calibration.xml --fisheye --undistort --balance 1.0
+    python calibrate_camera.py calibrate \
+        --input-dir=calibration_images \
+        --output-file=calibration.xml \
+        --fisheye \
+        --undistort \
+        --balance 1.0
     ```
 
 ## Command-Line Arguments

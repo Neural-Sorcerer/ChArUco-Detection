@@ -364,25 +364,37 @@ class CameraCalibrator:
             logging.error(f"❌ No calibration data available")
             return image
 
+        R = np.eye(3)
+        m1type = cv2.CV_16SC2
         h, w = image.shape[:2]
+        img_size = (w, h)
 
         if self.fisheye:
             # Fisheye undistortion
             # Get optimal new camera matrix for fisheye
             new_camera_matrix = cv2.fisheye.estimateNewCameraMatrixForUndistortRectify(
-                self.camera_matrix, self.dist_coeffs, (w, h), np.eye(3), balance=balance
+                K=self.camera_matrix,
+                D=self.dist_coeffs,
+                image_size=img_size,
+                R=R,
+                balance=balance
             )
 
             # Create undistortion maps
             map1, map2 = cv2.fisheye.initUndistortRectifyMap(
-                self.camera_matrix, self.dist_coeffs, np.eye(3), new_camera_matrix, (w, h), cv2.CV_16SC2
+                K=self.camera_matrix,
+                D=self.dist_coeffs,
+                R=R,
+                P=new_camera_matrix,
+                size=img_size,
+                m1type=m1type
             )
 
             # Apply undistortion
             undistorted = cv2.remap(
-                image,
-                map1,
-                map2,
+                src=image,
+                map1=map1,
+                map2=map2,
                 interpolation=cv2.INTER_LINEAR,
                 borderMode=cv2.BORDER_CONSTANT
             )
@@ -391,13 +403,21 @@ class CameraCalibrator:
             # Pinhole undistortion
             # Get optimal new camera matrix
             new_camera_matrix, roi = cv2.getOptimalNewCameraMatrix(
-                self.camera_matrix, self.dist_coeffs, (w, h), alpha=balance, newImgSize=(w, h)
+                cameraMatrix=self.camera_matrix,
+                distCoeffs=self.dist_coeffs,
+                imageSize=img_size,
+                alpha=balance,
+                newImgSize=img_size
             )
 
             if simple:
                 # Undistort
                 undistorted = cv2.undistort(
-                    image, self.camera_matrix, self.dist_coeffs, None, new_camera_matrix
+                    src=image,
+                    cameraMatrix=self.camera_matrix,
+                    distCoeffs=self.dist_coeffs,
+                    dst=None,
+                    newCameraMatrix=new_camera_matrix
                 )
 
                 # Crop the image
@@ -408,14 +428,19 @@ class CameraCalibrator:
                 
                 # Create undistortion maps
                 map1, map2 = cv2.initUndistortRectifyMap(
-                    self.camera_matrix, self.dist_coeffs, np.eye(3), new_camera_matrix, (w, h), cv2.CV_16SC2
+                    cameraMatrix=self.camera_matrix,
+                    distCoeffs=self.dist_coeffs,
+                    R=R,
+                    newCameraMatrix=new_camera_matrix,
+                    size=img_size,
+                    m1type=m1type
                 )
-                
+            
                 # Apply undistortion
                 undistorted = cv2.remap(
-                    image,
-                    map1,
-                    map2,
+                    src=image,
+                    map1=map1,
+                    map2=map2,
                     interpolation=cv2.INTER_LINEAR,
                     borderMode=cv2.BORDER_CONSTANT
                 )

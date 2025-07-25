@@ -224,10 +224,23 @@ def main() -> None:
     parser.add_argument('--show-ids', action="store_true", default=False, help='show corner IDs')
     parser.add_argument('--project-points', action="store_true", default=False, help='project 3D points to image plane')
     parser.add_argument('--evaluate-3d', action="store_true", default=False, help='evaluate 3D consistency')
+
+    # Charuco board arguments
+    parser.add_argument('--board-id', type=int, default=0, help='Charuco board ID')
+    parser.add_argument('--x-squares', type=int, default=7, help='Number of squares in X direction')
+    parser.add_argument('--y-squares', type=int, default=7, help='Number of squares in Y direction')
+    parser.add_argument('--square-length', type=float, default=0.10, help='Square length in meters')
+    parser.add_argument('--marker-length', type=float, default=None, help='Marker length in meters (default: 75% of square length)')
     args = parser.parse_args()
 
     # Create configurations
-    board_config = CharucoBoardConfig()
+    board_config = CharucoBoardConfig(
+        board_id=args.board_id,
+        x_squares=args.x_squares,
+        y_squares=args.y_squares,
+        square_length=args.square_length,
+        marker_length=args.marker_length
+    )
     detector_config = DetectorConfig()
     charuco_detector_config = CharucoDetectorConfig()
 

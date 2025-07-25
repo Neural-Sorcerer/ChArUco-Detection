@@ -311,15 +311,15 @@ if __name__ == '__main__':
     main()
 """ 
 python calibrate_camera.py calibrate \
-    --input-dir calibration_images/calibration_images_8 \
-    --output-file calibration_images_8/calibration.xml \
+    --input-dir=calibration_images/calibration_images_8 \
+    --output-file=calibration_images_8/calibration.xml \
     --undistort \
-    --balance 0.0
+    --balance=0.0
     
 python calibrate_camera.py calibrate \
-    --input-dir calibration_images/calibration_images_0 \
-    --output-file calibration.xml \
+    --input-dir=calibration_images/calibration_images_0 \
+    --output-file=calibration.xml \
     --fisheye \
     --undistort \
-    --balance 0.0
+    --balance=0.0
 """

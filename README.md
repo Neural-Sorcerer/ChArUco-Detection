@@ -80,7 +80,7 @@ python charuco_reader.py --index 0 --camera-params assets/intrinsics.xml --proje
 3. Test the calibration:
 
     ```bash
-    python calibrate_camera.py calibrate --input-dir calibration_images --output-file calibration.xml --fisheye --test
+    python calibrate_camera.py calibrate --input-dir calibration_images --output-file calibration.xml --fisheye --undistort --balance 1.0
     ```
 
 ## Command-Line Arguments
@@ -126,7 +126,7 @@ python calibrate_camera.py collect [options]
 
 - `--index`: Camera index or video file path
 - `--output-dir`: Output directory for calibration images
-- `--resolution`: Camera resolution (SS, SD, HD, FHD, UHD)
+- `--resolution`: Camera resolution (SS, SD, HD, FHD, UHD, OMS)
 
 #### Calibrate mode
 
@@ -137,7 +137,10 @@ python calibrate_camera.py calibrate [options]
 - `--input-dir`: Input directory with calibration images
 - `--pattern`: File pattern for calibration images
 - `--output-file`: Output file for calibration parameters
-- `--test`: Test calibration by undistorting images
+- `--fisheye`: Assume fisheye camera model
+- `--undistort`: Test calibration by undistorting images
+- `--balance`: Balance value for undistortion (0.0 = crop, 1.0 = stretch)
+- `--simple`: Use simple undistortion (no remapping)
 
 ## Important Note on Board Generation
 

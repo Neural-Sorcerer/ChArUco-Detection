@@ -8,6 +8,7 @@ import os
 import glob
 import logging
 import argparse
+from time import time
 from typing import Tuple, Optional
 
 # === Third-Party Libraries ===
@@ -23,10 +24,10 @@ from configs.config import Resolution, CharucoBoardConfig, DetectorConfig, Charu
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    format='%(asctime)s - %(name)s:%(lineno)02d - %(levelname)s - %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'  # Removes milliseconds
 )
-logger = logging.getLogger(__name__)
+logging = logging.getLogger(__name__)
 np.set_printoptions(suppress=True, precision=14)
 
 
@@ -40,7 +41,7 @@ def collect_calibration_images(args: argparse.Namespace,
         detector: CharucoDetector instance
         resolution: Resolution for video capture
     """
-    logger.info(f"⭐ ───────────── Collecting Calibration Images ───────────── ⭐")
+    logging.info(f"⭐ ───────────── Collecting Calibration Images ───────────── ⭐")
 
     # Create output directory
     os.makedirs(args.output_dir, exist_ok=True)
@@ -58,7 +59,7 @@ def collect_calibration_images(args: argparse.Namespace,
         cap = cv2.VideoCapture(args.index)
 
     if not cap.isOpened():
-        logger.error(f"❌ Cannot open camera {args.index}")
+        logging.error(f"❌ Cannot open camera {args.index}")
         return
 
     # Create window
@@ -66,9 +67,10 @@ def collect_calibration_images(args: argparse.Namespace,
     cv2.namedWindow(winname, cv2.WINDOW_NORMAL)
     cv2.resizeWindow(winname, width=Resolution.HD[0], height=Resolution.HD[1])
 
-    logger.info("Press 's' to save an image, 'q' to quit")
+    logging.info("⚠️ Press 's' to save an image or 'q' to quit the process!")
 
     frame_id = 0
+    save_time = 0
     while cap.isOpened():
         success, frame = cap.read()
 
@@ -112,6 +114,19 @@ def collect_calibration_images(args: argparse.Namespace,
                 cv2.LINE_AA
             )
 
+        # Show saved flag
+        if (time() - save_time) < 1:
+            cv2.putText(
+                display_frame,
+                f"✅ Image Saved",
+                (10, 70),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                1.0,
+                (0, 255, 255),
+                2,
+                cv2.LINE_AA
+            )
+
         # Show frame
         cv2.imshow(winname, display_frame)
 
@@ -125,16 +140,18 @@ def collect_calibration_images(args: argparse.Namespace,
             if (charuco_corners is not None) and (len(charuco_corners) >= 4):
                 output_path = os.path.join(args.output_dir, f"calib_{frame_id:04d}.png")
                 cv2.imwrite(output_path, frame)
-                logger.info(f"Saved {output_path} with {len(charuco_corners)} corners")
+                logging.info(f"Saved {output_path} with {len(charuco_corners)} corners")
                 frame_id += 1
+                save_time = time()
+                
             else:
-                logger.warning("⚠️ Not enough corners detected. Image not saved.")
+                logging.warning("⚠️ Not enough corners detected. Image not saved.")
 
     # Clean up
     cap.release()
     cv2.destroyAllWindows()
 
-    logger.info(f"✅ Collected {frame_id} calibration images")
+    logging.info(f"✅ Collected {frame_id} calibration images")
 
 
 def calibrate_from_images(args: argparse.Namespace, detector: CharucoDetector) -> Optional[CameraCalibrator]:
@@ -147,7 +164,7 @@ def calibrate_from_images(args: argparse.Namespace, detector: CharucoDetector) -
     Returns:
         CameraCalibrator instance if calibration was successful, None otherwise
     """
-    logger.info(f"⭐ ───────────── Camera Calibration ───────────── ⭐")
+    logging.info(f"⭐ ───────────── Camera Calibration ───────────── ⭐")
     
     # Create calibrator
     calibrator = CameraCalibrator(detector, fisheye=args.fisheye)
@@ -159,17 +176,17 @@ def calibrate_from_images(args: argparse.Namespace, detector: CharucoDetector) -
     )
 
     if num_images == 0:
-        logger.error(f"❌ No calibration images found")
+        logging.error(f"❌ No calibration images found")
         return None
 
     # Perform calibration
     if not calibrator.calibrate():
-        logger.error("❌ Calibration failed")
+        logging.error("❌ Calibration failed")
         return None
 
     # Save calibration parameters
     if not calibrator.save_calibration(args.output_file):
-        logger.error("❌ Failed to save calibration parameters")
+        logging.error("❌ Failed to save calibration parameters")
 
     # Show calibration metrics
     metrics = calibrator.get_calibration_metrics()
@@ -186,7 +203,7 @@ def test_calibration(args: argparse.Namespace, calibrator: CameraCalibrator) -> 
         calibrator: CameraCalibrator instance
     """
     # Create output directory
-    logger.info(f"⭐ ───────────── Applying Undistortion ───────────── ⭐")
+    logging.info(f"⭐ ───────────── Applying Undistortion ───────────── ⭐")
     
     undistort_dir = os.path.join(os.path.dirname(args.output_file), "undistorted")
     os.makedirs(undistort_dir, exist_ok=True)
@@ -195,26 +212,26 @@ def test_calibration(args: argparse.Namespace, calibrator: CameraCalibrator) -> 
     image_files = glob.glob(os.path.join(args.input_dir, args.pattern))
 
     if not image_files:
-        logger.warning(f"⚠️ No images found in {args.input_dir} matching pattern {args.pattern}")
+        logging.warning(f"⚠️ No images found in {args.input_dir} matching pattern {args.pattern}")
         return
 
     # Undistort each image
     for i, image_file in enumerate(image_files):
-        logger.info(f"Undistorting {image_file}")
+        logging.info(f"Undistorting {image_file}")
         image = cv2.imread(image_file)
 
         if image is None:
-            logger.warning(f"⚠️ Could not read image {image_file}")
+            logging.warning(f"⚠️ Could not read image {image_file}")
             continue
 
         # Undistort
-        undistorted = calibrator.undistort_image(image)
+        undistorted = calibrator.undistort_image(image, args.balance, args.simple)
 
         # Save undistorted image
         output_path = os.path.join(undistort_dir, f"undistorted_{i:04d}.png")
         cv2.imwrite(output_path, undistorted)
 
-    logger.info(f"✅ Undistorted images saved to {undistort_dir}")
+    logging.info(f"✅ Undistorted images saved to {undistort_dir}")
 
 
 def main() -> None:
@@ -249,8 +266,10 @@ def main() -> None:
     calibrate_parser.add_argument('--input-dir', type=str, default='calibration_images', help='Input directory with calibration images')
     calibrate_parser.add_argument('--pattern', type=str, default='*.png', help='File pattern for calibration images')
     calibrate_parser.add_argument('--output-file', type=str, default='calibration.xml', help='Output file for calibration parameters')
-    calibrate_parser.add_argument('--test', action='store_true', help='Test calibration by undistorting images')
     calibrate_parser.add_argument('--fisheye', action='store_true', help='Assume fisheye camera model')
+    calibrate_parser.add_argument('--undistort', action='store_true', help='Test calibration by undistorting images')
+    calibrate_parser.add_argument('--balance', type=float, default=0.0, help='Balance value for undistortion (0.0 = crop, 1.0 = stretch)')
+    calibrate_parser.add_argument('--simple', action='store_true', help='Use simple undistortion (no remapping)')
 
     args = parser.parse_args()
 
@@ -277,7 +296,7 @@ def main() -> None:
     elif args.mode == 'calibrate':
         calibrator = calibrate_from_images(args, detector)
 
-        if calibrator and args.test:
+        if calibrator and args.undistort:
             test_calibration(args, calibrator)
 
     elif args.mode == 'generate':
@@ -292,9 +311,15 @@ if __name__ == '__main__':
     main()
 """ 
 python calibrate_camera.py calibrate \
+    --input-dir calibration_images/calibration_images_8 \
+    --output-file calibration_images_8/calibration.xml \
+    --undistort \
+    --balance 0.0
+    
+python calibrate_camera.py calibrate \
     --input-dir calibration_images/calibration_images_0 \
-    --output-file calibration_images/calibration_images_0/calibration.xml \
-    --test
+    --output-file calibration.xml \
+    --fisheye \
+    --undistort \
+    --balance 0.0
 """
-
-Finish visuazlisation

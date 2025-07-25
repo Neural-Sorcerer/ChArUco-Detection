@@ -134,12 +134,12 @@ class CameraCalibrator:
             if (corners is not None) and (ids is not None) and (len(corners) > 3):
                 # Get object points for detected corners
                 obj_pts, img_pts = board.matchImagePoints(corners, ids)
-                if obj_pts is not None and img_pts is not None:
+                if (obj_pts is not None) and (img_pts is not None):
                     objpoints.append(obj_pts.reshape(-1, 1, 3))
                     imgpoints.append(img_pts.reshape(-1, 1, 2))
 
         if len(objpoints) < 3:
-            logging.error(f"❌ Not enough valid images for fisheye calibration")
+            logging.error(f"❌ Not enough valid images for calibration")
             return False
         
         try:
@@ -337,7 +337,7 @@ class CameraCalibrator:
             logging.info(f"⭐ ───────────── Calibration Quality ───────────── ⭐")
             for key, value in metrics.items():
                 if isinstance(value, list):
-                    result = f"{key}:\n{np.array(value)}"
+                    result = f"{key}:\n{np.array(value)}\n"
                 else:
                     result = f"{key}: {value}"
                 if "error" in key:
@@ -349,12 +349,13 @@ class CameraCalibrator:
             logging.error(f"❌ Error showing calibration metrics: {str(e)}")
             return False
 
-
-    def undistort_image(self, image: np.ndarray) -> np.ndarray:
+    def undistort_image(self, image: np.ndarray, balance: float = 1.0, simple: bool = False) -> np.ndarray:
         """Undistort an image using calibration parameters.
 
         Args:
             image: Input image
+            balance: Balance value for undistortion (0.0 = crop, 1.0 = stretch)
+            simple: Whether to use simple undistortion (no remapping)
 
         Returns:
             Undistorted image
@@ -369,7 +370,7 @@ class CameraCalibrator:
             # Fisheye undistortion
             # Get optimal new camera matrix for fisheye
             new_camera_matrix = cv2.fisheye.estimateNewCameraMatrixForUndistortRectify(
-                self.camera_matrix, self.dist_coeffs, (w, h), np.eye(3), balance=1.0
+                self.camera_matrix, self.dist_coeffs, (w, h), np.eye(3), balance=balance
             )
 
             # Create undistortion maps
@@ -378,23 +379,45 @@ class CameraCalibrator:
             )
 
             # Apply undistortion
-            undistorted = cv2.remap(image, map1, map2, interpolation=cv2.INTER_LINEAR, borderMode=cv2.BORDER_CONSTANT)
+            undistorted = cv2.remap(
+                image,
+                map1,
+                map2,
+                interpolation=cv2.INTER_LINEAR,
+                borderMode=cv2.BORDER_CONSTANT
+            )
 
         else:
             # Pinhole undistortion
             # Get optimal new camera matrix
             new_camera_matrix, roi = cv2.getOptimalNewCameraMatrix(
-                self.camera_matrix, self.dist_coeffs, (w, h), 1, (w, h)
+                self.camera_matrix, self.dist_coeffs, (w, h), alpha=balance, newImgSize=(w, h)
             )
 
-            # Undistort
-            undistorted = cv2.undistort(
-                image, self.camera_matrix, self.dist_coeffs, None, new_camera_matrix
-            )
+            if simple:
+                # Undistort
+                undistorted = cv2.undistort(
+                    image, self.camera_matrix, self.dist_coeffs, None, new_camera_matrix
+                )
 
-            # Crop the image
-            x, y, w, h = roi
-            if w > 0 and h > 0:
-                undistorted = undistorted[y:y+h, x:x+w]
+                # Crop the image
+                x, y, w, h = roi
+                if w > 0 and h > 0:
+                    undistorted = undistorted[y:y+h, x:x+w]
+            else:
+                
+                # Create undistortion maps
+                map1, map2 = cv2.initUndistortRectifyMap(
+                    self.camera_matrix, self.dist_coeffs, np.eye(3), new_camera_matrix, (w, h), cv2.CV_16SC2
+                )
+                
+                # Apply undistortion
+                undistorted = cv2.remap(
+                    image,
+                    map1,
+                    map2,
+                    interpolation=cv2.INTER_LINEAR,
+                    borderMode=cv2.BORDER_CONSTANT
+                )
 
         return undistorted

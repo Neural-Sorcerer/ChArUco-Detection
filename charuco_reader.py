@@ -22,9 +22,10 @@ from configs.config import Resolution, CharucoBoardConfig, DetectorConfig, Charu
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    format='%(asctime)s - %(name)s:%(lineno)02d - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'  # Removes milliseconds
 )
-logger = logging.getLogger(__name__)
+logging = logging.getLogger(__name__)
 
 
 def process_frame(detector: CharucoDetector,
@@ -115,7 +116,7 @@ def run_pipeline(args: argparse.Namespace,
         frame = cv2.imread(args.index)
 
         if frame is None:
-            logger.error(f"❌ Cannot open image {args.index}")
+            logging.error(f"❌ Cannot open image {args.index}")
             return
 
         # Create a window
@@ -150,7 +151,7 @@ def run_pipeline(args: argparse.Namespace,
             cap = cv2.VideoCapture(args.index)
 
         if not cap.isOpened():
-            logger.error(f"❌ Cannot open camera {args.index}")
+            logging.error(f"❌ Cannot open camera {args.index}")
             return
 
         # Create a window
@@ -163,7 +164,7 @@ def run_pipeline(args: argparse.Namespace,
             freeze = 1000
 
         if args.save:
-            logger.info("Press 's' to save an image or 'q' to quit the process!")
+            logging.info("⚠️ Press 's' to save an image or 'q' to quit the process!")
 
         frame_id = 0
         while cap.isOpened():

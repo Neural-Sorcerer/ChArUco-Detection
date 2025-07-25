@@ -3,13 +3,16 @@
 This module provides utility functions for loading camera parameters,
 saving frames, transforming 3D points, and evaluating 3D consistency.
 """
+# === Standard Libraries ===
 import os
-import cv2
 import time
 import logging
-from typing import Tuple, Dict, List, Optional, Union, Any
-import numpy as np
 import xml.etree.ElementTree as ET
+from typing import Tuple, Dict, List, Optional, Union, Any
+
+# === Third-Party Libraries ===
+import cv2
+import numpy as np
 
 
 def load_camera_params(file_path: str) -> Tuple[np.ndarray, np.ndarray]:
@@ -100,6 +103,36 @@ def save_frame(
     return output_path
 
 
+def project_points_to_image(
+    objpoint: np.ndarray,
+    rvec: np.ndarray,
+    tvec: np.ndarray,
+    camera_matrix: np.ndarray,
+    dist_coeffs: np.ndarray
+) -> np.ndarray:
+    """Project 3D points to image plane.
+
+    Args:
+        objpoint: Nx3 array of 3D points
+        rvec: Rotation vector
+        tvec: Translation vector
+        camera_matrix: 3x3 camera intrinsic matrix
+        dist_coeffs: Distortion coefficients
+
+    Returns:
+        imgpoints_proj: Nx2 array of projected 2D points
+    """
+    imgpoints_proj, _ = cv2.projectPoints(
+        objpoint.astype(np.float32),
+        rvec.astype(np.float32),
+        tvec.astype(np.float32),
+        camera_matrix.astype(np.float32),
+        dist_coeffs.astype(np.float32)
+    )
+    imgpoints_proj = imgpoints_proj.reshape(-1, 2)
+    return imgpoints_proj
+
+
 def invert_transformation(R: np.ndarray, t: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     """Invert a rigid transformation (R, t).
 
@@ -141,67 +174,6 @@ def transform_points(points: np.ndarray, R: np.ndarray, t: np.ndarray) -> np.nda
     return transformed_points
 
 
-def project_points_to_image(
-    objpoint: np.ndarray,
-    rvec: np.ndarray,
-    tvec: np.ndarray,
-    camera_matrix: np.ndarray,
-    dist_coeffs: np.ndarray
-) -> np.ndarray:
-    """Project 3D points to image plane.
-
-    Args:
-        objpoint: Nx3 array of 3D points
-        rvec: Rotation vector
-        tvec: Translation vector
-        camera_matrix: 3x3 camera intrinsic matrix
-        dist_coeffs: Distortion coefficients
-
-    Returns:
-        imgpoints_proj: Nx2 array of projected 2D points
-    """
-    imgpoints_proj, _ = cv2.projectPoints(
-        objpoint.astype(np.float32),
-        rvec.astype(np.float32),
-        tvec.astype(np.float32),
-        camera_matrix.astype(np.float32),
-        dist_coeffs.astype(np.float32)
-    )
-    imgpoints_proj = imgpoints_proj.reshape(-1, 2)
-    return imgpoints_proj
-
-
-def verify_consistency_3Dobjpoints(
-    objpoint: np.ndarray,
-    pose_matrix: np.ndarray,
-    pattern_size: Tuple[int, int],
-    square_size: float
-) -> Dict[str, Any]:
-    """Verify 3D consistency of object points across different camera views.
-
-    Args:
-        objpoint: Nx3 array of 3D points in camera 0 coordinate system
-        pose_matrix: 4x4 transformation matrix from camera 0 to camera 1
-        pattern_size: (cols, rows) inner-corner counts
-        square_size: Physical side length of one checker square in meters
-
-    Returns:
-        Dictionary with evaluation metrics
-    """
-    # Extract R and t
-    R = pose_matrix[:3, :3]  # Rotation matrix (3x3)
-    t = pose_matrix[:3, 3]   # Translation vector (3,)
-
-    # Invert the transformation to get camera 0 relative to camera 1
-    R_inv, t_inv = invert_transformation(R, t)
-
-    # Transform 3D points from camera 0 coordinate system to camera 1 coordinate system
-    transform_objpoint = transform_points(objpoint.reshape(-1, 3), R_inv, t_inv)
-
-    # Evaluate 3D consistency
-    return evaluate_checkerboard_3d(transform_objpoint, pattern_size, square_size)
-
-
 def evaluate_checkerboard_3d(
     points3d: np.ndarray,
     pattern_size: Tuple[int, int],
@@ -211,19 +183,19 @@ def evaluate_checkerboard_3d(
 
     Args:
         points3d: (N,3) array of corner coords in camera space
-        pattern_size: (cols, rows) inner‐corner counts
+        pattern_size: (cols, rows) inner-corner counts
         square_size: Physical side length of one checker square in meters
 
     Returns:
         Dictionary with keys:
-            'planarity': {'mean_dist', 'max_dist'} – distances (m) to best‐fit plane
+            'planarity': {'mean_dist', 'max_dist'} - distances (m) to best-fit plane
             'spacing': {
                 'row_mean', 'row_std',  # along each row
                 'col_mean', 'col_std'   # along each column
             }
-            'rmse_edge': float – RMSE of |d_ij – square_size|
-            'orthogonality': {'mean_deg','std_deg'} – angle dev from 90°
-            'diagonal': {'mean', 'std'} – diag length dev from √2·square_size
+            'rmse_edge': float - RMSE of |d_ij - square_size|
+            'orthogonality': {'mean_deg','std_deg'} - angle dev from 90°
+            'diagonal': {'mean', 'std'} - diag length dev from √2·square_size
     """
     # reshape into (rows, cols, 3)
     cols, rows = pattern_size
@@ -236,10 +208,10 @@ def evaluate_checkerboard_3d(
     P = points3d - points3d.mean(axis=0)
     _, S, Vt = np.linalg.svd(P, full_matrices=False)
     normal = Vt[-1]                 # plane normal
-    dists = np.abs(P.dot(normal))   # signed‐distances
+    dists = np.abs(P.dot(normal))   # signed-distances
     planarity = {"mean_dist": dists.mean(), "max_dist": dists.max()}
 
-    # 2) Edge‐spacing along rows & cols
+    # 2) Edge-spacing along rows & cols
     row_ds = []
     col_ds = []
     for i in range(rows):
@@ -257,12 +229,12 @@ def evaluate_checkerboard_3d(
         "col_std": col_ds.std(),
     }
 
-    # 3) RMSE of edge‐length error
+    # 3) RMSE of edge-length error
     all_ds = np.concatenate([row_ds, col_ds])
     rmse_edge = np.sqrt(np.mean((all_ds - square_size) ** 2))
 
     # 4) Orthogonality: for each interior corner compute angle between
-    #    its row‐edge and col‐edge vectors
+    #    its row-edge and col-edge vectors
     ang_errors = []
     for i in range(rows - 1):
         for j in range(cols - 1):
@@ -297,3 +269,34 @@ def evaluate_checkerboard_3d(
         logging.info(f"{key}: {value}")
 
     return result
+
+
+def verify_consistency_3Dobjpoints(
+    objpoint: np.ndarray,
+    pose_matrix: np.ndarray,
+    pattern_size: Tuple[int, int],
+    square_size: float
+) -> Dict[str, Any]:
+    """Verify 3D consistency of object points across different camera views.
+
+    Args:
+        objpoint: Nx3 array of 3D points in camera 0 coordinate system
+        pose_matrix: 4x4 transformation matrix from camera 0 to camera 1
+        pattern_size: (cols, rows) inner-corner counts
+        square_size: Physical side length of one checker square in meters
+
+    Returns:
+        Dictionary with evaluation metrics
+    """
+    # Extract R and t
+    R = pose_matrix[:3, :3]  # Rotation matrix (3x3)
+    t = pose_matrix[:3, 3]   # Translation vector (3,)
+
+    # Invert the transformation to get camera 0 relative to camera 1
+    R_inv, t_inv = invert_transformation(R, t)
+
+    # Transform 3D points from camera 0 coordinate system to camera 1 coordinate system
+    transform_objpoint = transform_points(objpoint.reshape(-1, 3), R_inv, t_inv)
+
+    # Evaluate 3D consistency
+    return evaluate_checkerboard_3d(transform_objpoint, pattern_size, square_size)

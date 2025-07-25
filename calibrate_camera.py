@@ -17,6 +17,7 @@ import numpy as np
 
 # === Local Modules ===
 from src.calibration import CameraCalibrator
+from utils.data_judgment import DataQualityJudge, CalibrationSample
 from src.charuco_detector import CharucoDetector
 from configs.config import Resolution, CharucoBoardConfig, DetectorConfig, CharucoDetectorConfig
 
@@ -154,6 +155,204 @@ def collect_calibration_images(args: argparse.Namespace,
     logging.info(f"✅ Collected {frame_id} calibration images")
 
 
+def collect_with_quality_assessment(
+    args: argparse.Namespace,
+    detector: CharucoDetector,
+    resolution: Tuple[int, int] = Resolution.FHD
+) -> None:
+    """Collect calibration images with quality assessment and diversity filtering.
+
+    Args:
+        args: Command-line arguments
+        detector: CharucoDetector instance
+        resolution: Resolution for video capture
+    """
+    logging.info(f"⭐ ───────────── Collecting Images with Quality Assessment ───────────── ⭐")
+
+    # Create output directory
+    os.makedirs(args.output_dir, exist_ok=True)
+
+    # Initialize data quality judge
+    judge = DataQualityJudge(
+        image_size=resolution,
+        target_samples=args.target_samples
+    )
+
+    # Open camera or video file
+    if args.index.isdigit():
+        cap = cv2.VideoCapture(int(args.index), cv2.CAP_V4L2)
+        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, resolution[0])
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, resolution[1])
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+    else:
+        cap = cv2.VideoCapture(args.index)
+
+    if not cap.isOpened():
+        logging.error(f"❌ Cannot open camera {args.index}")
+        return
+
+    # Create window
+    winname = "Quality-Aware Calibration Collection"
+    cv2.namedWindow(winname, cv2.WINDOW_NORMAL)
+    cv2.resizeWindow(winname, width=Resolution.HD[0] + 350, height=Resolution.HD[1])
+
+    logging.info("⚠️ Press 's' to save, 'h' for heatmap, 'q' to quit")
+
+    frame_id = 0
+
+    while cap.isOpened():
+        success, frame = cap.read()
+        if not success:
+            break
+
+        display_frame = frame.copy()
+
+        # Detect Charuco board
+        charuco_corners, charuco_ids, marker_corners, marker_ids = detector.detect_board(display_frame)
+
+        # Visualization
+        if marker_corners:
+            detector.draw_detected_markers(display_frame, marker_corners, marker_ids)
+
+        sample_quality = None
+        if (charuco_corners is not None) and (len(charuco_corners) > 0):
+            detector.draw_detected_corners(display_frame, charuco_corners, charuco_ids)
+
+            # Evaluate sample quality
+            sample_quality = judge.evaluate_sample(charuco_corners, timestamp=frame_id)
+
+            # Show quality information
+            quality_color = (0, 255, 0) if sample_quality.is_accepted else (0, 165, 255)
+            quality_text = "GOOD SAMPLE" if sample_quality.is_accepted else "POOR/DUPLICATE"
+
+            cv2.putText(display_frame, f"Corners: {len(charuco_corners)} | {quality_text}",
+                       (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, quality_color, 2)
+
+            cv2.putText(display_frame, f"Size: {sample_quality.size:.3f} | Skew: {sample_quality.skew:.3f}",
+                       (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+        else:
+            cv2.putText(display_frame, "No corners detected", (10, 30),
+                       cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2)
+
+        # Add progress overlay
+        display_frame_with_progress = judge.render_progress_overlay(display_frame)
+        cv2.imshow(winname, display_frame_with_progress)
+
+        # Handle keys
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord('q'):
+            break
+        elif key == ord('h'):
+            heatmap_path = os.path.join(args.output_dir, "position_heatmap.png")
+            judge.generate_heatmap(heatmap_path)
+        elif key == ord('s') or (args.auto_save and sample_quality and sample_quality.is_accepted):
+            if sample_quality and sample_quality.is_accepted:
+                output_path = os.path.join(args.output_dir, f"calib_{frame_id:04d}.png")
+                cv2.imwrite(output_path, frame)
+                logging.info(f"✅ Saved {output_path} - Quality: size={sample_quality.size:.3f}, skew={sample_quality.skew:.3f}")
+                frame_id += 1
+            elif charuco_corners is not None and len(charuco_corners) >= 4:
+                logging.warning("⚠️ Sample not saved - poor quality or too similar")
+            else:
+                logging.warning("⚠️ Not enough corners detected")
+
+    # Cleanup and generate reports
+    cap.release()
+    cv2.destroyAllWindows()
+
+    heatmap_path = os.path.join(args.output_dir, "final_heatmap.png")
+    judge.generate_heatmap(heatmap_path)
+
+    summary_path = os.path.join(args.output_dir, "collection_summary.json")
+    judge.export_summary(summary_path)
+
+    progress = judge.get_progress_info()
+    logging.info(f"🎯 Collection complete: {progress['accepted_samples']} diverse samples")
+
+    if progress['is_sufficient']:
+        logging.info("✅ Sufficient diverse samples for calibration!")
+    else:
+        logging.warning(f"⚠️ Consider collecting more samples (target: {judge.target_samples})")
+
+
+def filter_existing_dataset(args: argparse.Namespace) -> None:
+    """Filter an existing dataset to remove redundant samples.
+
+    Args:
+        args: Command-line arguments
+    """
+    logging.info(f"⭐ ───────────── Filtering Existing Dataset ───────────── ⭐")
+
+    import glob
+    from time import time
+
+    # Find all images in input directory
+    image_files = glob.glob(os.path.join(args.input_dir, "*.png"))
+    image_files.extend(glob.glob(os.path.join(args.input_dir, "*.jpg")))
+
+    if not image_files:
+        logging.error(f"❌ No images found in {args.input_dir}")
+        return
+
+    logging.info(f"Found {len(image_files)} images to filter")
+
+    # Create detector for corner detection
+    board_config = CharucoBoardConfig()
+    detector_config = DetectorConfig()
+    charuco_detector_config = CharucoDetectorConfig()
+    detector = CharucoDetector(board_config, detector_config, charuco_detector_config)
+
+    # Initialize quality judge
+    sample_image = cv2.imread(image_files[0])
+    image_size = (sample_image.shape[1], sample_image.shape[0])
+
+    judge = DataQualityJudge(
+        image_size=image_size,
+        target_samples=args.target_samples
+    )
+
+    # Process all images and create samples
+    samples = []
+    for i, image_file in enumerate(image_files):
+        logging.info(f"Processing {i+1}/{len(image_files)}: {os.path.basename(image_file)}")
+
+        image = cv2.imread(image_file)
+        if image is None:
+            continue
+
+        # Detect corners
+        charuco_corners, charuco_ids, _, _ = detector.detect_board(image)
+
+        if charuco_corners is not None and len(charuco_corners) >= 4:
+            sample = judge.evaluate_sample(charuco_corners, image_file, time())
+            samples.append(sample)
+
+    # Filter samples for diversity
+    filtered_samples = judge.filter_existing_dataset(samples)
+
+    # Create output directory and copy filtered images
+    os.makedirs(args.output_dir, exist_ok=True)
+
+    for i, sample in enumerate(filtered_samples):
+        src_path = sample.image_path
+        dst_path = os.path.join(args.output_dir, f"filtered_{i:04d}.png")
+
+        # Copy image
+        import shutil
+        shutil.copy2(src_path, dst_path)
+
+    # Generate reports
+    heatmap_path = os.path.join(args.output_dir, "filtered_heatmap.png")
+    judge.generate_heatmap(heatmap_path)
+
+    summary_path = os.path.join(args.output_dir, "filter_summary.json")
+    judge.export_summary(summary_path)
+
+    logging.info(f"🎯 Filtering complete: {len(image_files)} -> {len(filtered_samples)} images")
+    logging.info(f"📊 Reports saved: {heatmap_path}, {summary_path}")
+
+
 def calibrate_from_images(args: argparse.Namespace, detector: CharucoDetector) -> Optional[CameraCalibrator]:
     """Calibrate camera from collected images.
 
@@ -242,7 +441,7 @@ def main() -> None:
     # Common arguments
     parser.add_argument('--board-id', type=int, default=0, help='Charuco board ID')
     parser.add_argument('--x-squares', type=int, default=7, help='Number of squares in X direction')
-    parser.add_argument('--y-squares', type=int, default=7, help='Number of squares in Y direction')
+    parser.add_argument('--y-squares', type=int, default=5, help='Number of squares in Y direction')
     parser.add_argument('--square-length', type=float, default=0.12, help='Square length in meters')
     parser.add_argument('--marker-length', type=float, default=None, help='Marker length in meters (default: 75% of square length)')
 
@@ -260,6 +459,9 @@ def main() -> None:
     collect_parser.add_argument('--index', type=str, default="2", help='Camera index or video file path')
     collect_parser.add_argument('--output-dir', type=str, default='calibration_images', help='Output directory for calibration images')
     collect_parser.add_argument('--resolution', type=str, default='FHD', choices=['SS', 'SD', 'HD', 'FHD', 'UHD', 'OMS'], help='Camera resolution')
+    collect_parser.add_argument('--use-quality-judge', action='store_true', help='Use data quality assessment during collection')
+    collect_parser.add_argument('--target-samples', type=int, default=50, help='Target number of diverse samples')
+    collect_parser.add_argument('--auto-save', action='store_true', help='Automatically save good quality samples')
 
     # Calibrate mode
     calibrate_parser = subparsers.add_parser('calibrate', help='Calibrate camera from images')
@@ -270,6 +472,12 @@ def main() -> None:
     calibrate_parser.add_argument('--undistort', action='store_true', help='Test calibration by undistorting images')
     calibrate_parser.add_argument('--balance', type=float, default=0.0, help='Balance value for undistortion (0.0 = crop, 1.0 = stretch)')
     calibrate_parser.add_argument('--simple', action='store_true', help='Use simple undistortion (no remapping)')
+
+    # Filter mode
+    filter_parser = subparsers.add_parser('filter', help='Filter existing dataset for diversity')
+    filter_parser.add_argument('--input-dir', type=str, default='calibration_images', help='Input directory with images to filter')
+    filter_parser.add_argument('--output-dir', type=str, default='filtered_images', help='Output directory for filtered images')
+    filter_parser.add_argument('--target-samples', type=int, default=50, help='Target number of diverse samples')
 
     args = parser.parse_args()
 
@@ -291,7 +499,11 @@ def main() -> None:
     if args.mode == 'collect':
         # Get resolution
         resolution = getattr(Resolution, args.resolution)
-        collect_calibration_images(args, detector, resolution)
+
+        if args.use_quality_judge:
+            collect_with_quality_assessment(args, detector, resolution)
+        else:
+            collect_calibration_images(args, detector, resolution)
 
     elif args.mode == 'calibrate':
         calibrator = calibrate_from_images(args, detector)
@@ -303,12 +515,17 @@ def main() -> None:
         detector.save_board_image(args.output_file,
                                   pixels_per_square=args.pixels_per_square,
                                   margin_percent=args.margin_percent)
+
+    elif args.mode == 'filter':
+        filter_existing_dataset(args)
+
     else:
         parser.print_help()
 
 
 if __name__ == '__main__':
     main()
+
 """ 
 python calibrate_camera.py calibrate \
     --input-dir=calibration_images/calibration_images_8 \
@@ -322,4 +539,17 @@ python calibrate_camera.py calibrate \
     --fisheye \
     --undistort \
     --balance=0.0
+    
+    
+python calibrate_camera.py collect \
+    --index=8 \
+    --output-dir=calibration_images/calibration_images_test \
+    --target-samples=50 \
+    --auto-save \
+    --use-quality-judge
+        
+        
+    collect_parser.add_argument('--use-quality-judge', action='store_true', help='Use data quality assessment during collection')
+    collect_parser.add_argument('--target-samples', type=int, default=50, help='Target number of diverse samples')
+
 """

@@ -6,11 +6,19 @@ A comprehensive toolkit for Charuco board detection, visualization, and camera c
 
 - **Charuco Board Detection**: Detect Charuco boards in images and videos
 - **Visualization**: Visualize detected markers, corners, and 3D axes
-- **Camera Calibration**: Calibrate cameras using Charuco boards
+- **Camera Calibration**: Calibrate cameras using Charuco boards (pinhole and fisheye models)
 - **Board Generation**: Generate Charuco board images for printing with customizable parameters
 - **3D Consistency Evaluation**: Evaluate 3D consistency of detected boards
+- **Data Quality Assessment**: Intelligent filtering for diverse calibration samples
+- **Position Heatmaps**: Visual coverage analysis for calibration data collection
+- **Automatic Sample Filtering**: Remove redundant samples based on position, size, and skew
 - **Flexible Input Handling**: Support for camera indices, video files, and image files
 - **Object-Oriented Design**: Well-structured, maintainable code with proper typing and documentation
+
+## TODO
+
+- [ ] Make a heatmap for board position to see, where the board has already been shown in the camera
+- [ ] Filter detected boards by: X, Y, size, skew, repetitive
 
 ## Create `charuco` conda env
 
@@ -18,6 +26,7 @@ A comprehensive toolkit for Charuco board detection, visualization, and camera c
 conda create --name charuco python=3.11 -y
 conda activate charuco
 pip install opencv-contrib-python==4.11.0.86
+pip install matplotlib
 ```
 
 ## Project Structure
@@ -79,21 +88,45 @@ python charuco_reader.py \
 1. Collect calibration images:
 
     ```bash
+    # Basic collection
     python calibrate_camera.py collect \
         --index=0 \
         --output-dir=calibration_images
+
+    # With intelligent quality assessment and diversity filtering
+    python calibrate_camera.py collect \
+        --index=0 \
+        --output-dir=calibration_images \
+        --use-quality-judge \
+        --target-samples=50 \
+        --auto-save
     ```
 
-2. Calibrate the camera:
+2. Filter existing dataset for diversity (optional):
 
     ```bash
+    python calibrate_camera.py filter \
+        --input-dir=raw_images \
+        --output-dir=filtered_images \
+        --target-samples=50
+    ```
+
+3. Calibrate the camera:
+
+    ```bash
+    # Pinhole camera model
+    python calibrate_camera.py calibrate \
+        --input-dir=calibration_images \
+        --output-file=calibration.xml
+
+    # Fisheye camera model
     python calibrate_camera.py calibrate \
         --input-dir=calibration_images \
         --output-file=calibration.xml \
-        --fisheye \
+        --fisheye
     ```
 
-3. Test the calibration:
+4. Test the calibration by undistorting images:
 
     ```bash
     python calibrate_camera.py calibrate \
@@ -101,7 +134,7 @@ python charuco_reader.py \
         --output-file=calibration.xml \
         --fisheye \
         --undistort \
-        --balance 1.0
+        --balance=1.0
     ```
 
 ## Command-Line Arguments
@@ -148,6 +181,9 @@ python calibrate_camera.py collect [options]
 - `--index`: Camera index or video file path
 - `--output-dir`: Output directory for calibration images
 - `--resolution`: Camera resolution (SS, SD, HD, FHD, UHD, OMS)
+- `--use-quality-judge`: Enable intelligent quality assessment during collection
+- `--target-samples`: Target number of diverse samples (default: 50)
+- `--auto-save`: Automatically save good quality samples
 
 #### Calibrate mode
 
@@ -162,6 +198,16 @@ python calibrate_camera.py calibrate [options]
 - `--undistort`: Test calibration by undistorting images
 - `--balance`: Balance value for undistortion (0.0 = crop, 1.0 = stretch)
 - `--simple`: Use simple undistortion (no remapping)
+
+#### Filter mode
+
+```bash
+python calibrate_camera.py filter [options]
+```
+
+- `--input-dir`: Input directory with images to filter
+- `--output-dir`: Output directory for filtered images
+- `--target-samples`: Target number of diverse samples (default: 50)
 
 ## Important Note on Board Generation
 

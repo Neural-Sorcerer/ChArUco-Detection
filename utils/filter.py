@@ -1,11 +1,11 @@
 
 # === Standard Libraries ===
 import os
+from typing import *
 from enum import Enum
 from xml.dom import minidom
 import xml.etree.ElementTree as ET
 from math import sqrt, ceil, pi, acos
-from typing import Tuple, Dict, List, Optional, Union, Any
 
 # === Third-Party Libraries ===
 import cv2

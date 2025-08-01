@@ -7,8 +7,8 @@ saving frames, transforming 3D points, and evaluating 3D consistency.
 import os
 import time
 import logging
+from typing import *
 import xml.etree.ElementTree as ET
-from typing import Tuple, Dict, List, Optional, Union, Any
 
 # === Third-Party Libraries ===
 import cv2

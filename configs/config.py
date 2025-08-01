@@ -4,8 +4,8 @@ This module contains all configuration parameters for the Charuco detection pipe
 including board specifications, camera settings, and detector parameters.
 """
 # === Standard Libraries ===
+from typing import *
 from dataclasses import dataclass
-from typing import Tuple, Dict, Any, Optional
 
 # === Third-Party Libraries ===
 import cv2

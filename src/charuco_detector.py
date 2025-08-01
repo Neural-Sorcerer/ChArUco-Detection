@@ -6,8 +6,8 @@ as well as visualizing the results.
 # === Standard Libraries ===
 import os
 import logging
+from typing import *
 import xml.etree.ElementTree as ET
-from typing import Tuple, Dict, List, Optional, Any, Union
 
 # === Third-Party Libraries ===
 import cv2
@@ -411,7 +411,9 @@ class CharucoDetector:
 
         # Generate board image
         board_img = self.board_config.board.generateImage(
-            outSize=(width, height), marginSize=margin_size, borderBits=border_bits)
+            outSize=(width, height),
+            marginSize=margin_size,
+            borderBits=border_bits)
         return board_img
 
     def save_board_image(self,

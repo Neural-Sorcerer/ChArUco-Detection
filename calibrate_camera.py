@@ -384,7 +384,7 @@ def calibrate_from_images(args: argparse.Namespace, detector: CharucoDetector) -
         return None
 
     # Save calibration parameters
-    if not calibrator.save_calibration(args.output_file):
+    if not calibrator.save_calibration_parameters(args.output_file):
         logging.error("❌ Failed to save calibration parameters")
 
     # Show calibration metrics

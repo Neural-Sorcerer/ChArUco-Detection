@@ -89,7 +89,7 @@ def process_frame(args: argparse.Namespace,
     # Draw detected corners
     if args.draw_charuco_corners:
         detector.draw_detected_corners(frame, charuco_corners, charuco_ids)
-
+    
     return frame
 
 

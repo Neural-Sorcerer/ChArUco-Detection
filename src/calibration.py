@@ -8,8 +8,8 @@ and saving/loading calibration parameters.
 import os
 import glob
 import logging
+from typing import *
 import xml.etree.ElementTree as ET
-from typing import Tuple, List, Dict, Optional, Any, Union
 
 # === Third-Party Libraries ===
 import cv2
@@ -72,7 +72,6 @@ class CameraCalibrator:
         # Add corners and IDs to lists
         self.all_corners.append(charuco_corners)
         self.all_ids.append(charuco_ids)
-
         return True
 
     def add_calibration_images_from_directory(self, directory: str, pattern: str = "*.png") -> int:
@@ -219,14 +218,13 @@ class CameraCalibrator:
                 )
 
                 logging.info(f"✅ Pinhole calibration successful.")
-
             return True
 
         except Exception as e:
             logging.error(f"❌ Calibration failed: {str(e)}")
             return False
 
-    def save_calibration(self, file_path: str) -> bool:
+    def save_calibration_parameters(self, file_path: str) -> bool:
         """Save calibration parameters to a file.
 
         Args:
@@ -305,6 +303,63 @@ class CameraCalibrator:
             logging.error(f"❌ Error saving calibration parameters: {str(e)}")
             return False
 
+    def load_calibration_parameters(file_path: str
+            ) -> Optional[Tuple[np.ndarray, np.ndarray, Tuple[int, int], bool, Optional[float]]]:
+        """Load calibration parameters from an XML file.
+
+        Args:
+            file_path: Path to the saved XML file
+
+        Returns:
+            Tuple of (camera_matrix, dist_coeffs, image_size, fisheye, reprojection_error) or None on failure
+        """
+        if not os.path.exists(file_path):
+            raise FileNotFoundError(f"Camera parameter file not found: {file_path}")
+        
+        try:
+            tree = ET.parse(file_path)
+            root = tree.getroot()
+
+            # Image size
+            width = int(root.find("image_size/width").text)
+            height = int(root.find("image_size/height").text)
+            image_size = (width, height)
+
+            # Camera intrinsics
+            fx = float(root.find("camera_matrix/fx").text)
+            fy = float(root.find("camera_matrix/fy").text)
+            ppx = float(root.find("camera_matrix/ppx").text)
+            ppy = float(root.find("camera_matrix/ppy").text)
+
+            camera_matrix = np.array([
+                [fx,  0, ppx],
+                [ 0, fy, ppy],
+                [ 0,  0,   1]
+            ], dtype=np.float64)
+
+            # Distortion coefficients
+            num_coeffs = int(root.find("num_distortion_coeffs").text)
+            dist_coeffs = np.zeros((num_coeffs, 1), dtype=np.float64)
+            for i in range(num_coeffs):
+                coeff_elem = root.find(f"distortion_coefficients/coeff_{i}")
+                if coeff_elem is not None:
+                    dist_coeffs[i] = float(coeff_elem.text)
+
+            # Camera model
+            cam_model_text = root.find("camera_model").text
+            fisheye = True if cam_model_text.lower() == "fisheye" else False
+
+            # Reprojection error
+            reprojection_error_elem = root.find("reprojection_error")
+            reprojection_error = float(reprojection_error_elem.text) if reprojection_error_elem is not None else None
+
+            logging.info(f"✅ Calibration parameters loaded from {file_path}")
+            return camera_matrix, dist_coeffs, image_size, fisheye, reprojection_error
+
+        except Exception as e:
+            logging.error(f"❌ Failed to load calibration from {file_path}: {str(e)}")
+            return None
+    
     def get_calibration_metrics(self) -> Dict[str, Any]:
         """Get calibration metrics.
 
@@ -321,7 +376,6 @@ class CameraCalibrator:
             "dist_coeffs": self.dist_coeffs.flatten().tolist(),
             "num_images": len(self.all_corners)
         }
-
         return metrics
     
     def show_calibration_metrics(self, metrics: Dict[str, Any]) -> bool:
@@ -444,5 +498,4 @@ class CameraCalibrator:
                     interpolation=cv2.INTER_LINEAR,
                     borderMode=cv2.BORDER_CONSTANT
                 )
-
         return undistorted, new_camera_matrix

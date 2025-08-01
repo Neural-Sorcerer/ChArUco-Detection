@@ -103,47 +103,6 @@ def save_frame(
     return output_path
 
 
-def project_points_to_image(
-    objpoint: np.ndarray,
-    rvec: np.ndarray,
-    tvec: np.ndarray,
-    camera_matrix: np.ndarray,
-    dist_coeffs: np.ndarray,
-    is_fisheye: bool = False
-) -> np.ndarray:
-    """Project 3D points to image plane.
-
-    Args:
-        objpoint: Nx3 array of 3D points
-        rvec: Rotation vector
-        tvec: Translation vector
-        camera_matrix: 3x3 camera intrinsic matrix
-        dist_coeffs: Distortion coefficients
-        is_fisheye: True if fisheye model is used
-
-    Returns:
-        imgpoints_proj: Nx2 array of projected 2D points
-    """
-    if is_fisheye:
-        imgpoints_proj, _ = cv2.fisheye.projectPoints(
-            objpoint,
-            rvec,
-            tvec,
-            camera_matrix,
-            dist_coeffs
-        )
-    else:
-        imgpoints_proj, _ = cv2.projectPoints(
-            objpoint,
-            rvec,
-            tvec,
-            camera_matrix,
-            dist_coeffs
-        )
-    imgpoints_proj = imgpoints_proj.reshape(-1, 2)
-    return imgpoints_proj
-
-
 def invert_transformation(R: np.ndarray, t: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     """Invert a rigid transformation (R, t).
 
@@ -275,9 +234,25 @@ def evaluate_checkerboard_3d(
         "orthogonality": orthogonality,
         "diagonal": diagonal,
     }
+    
+    def log_nested_result(result: dict, indent: int = 0):
+        tab = "    " * indent
+        for key, value in result.items():
+            if isinstance(value, dict):
+                logging.info(f"{tab}{key}:")
+                log_nested_result(value, indent + 1)
+            else:
+                try:
+                    # Convert numpy float to Python float and format in scientific notation
+                    if hasattr(value, 'item'):
+                        value = value.item()
+                    formatted = f"{value:.0E}"
+                except Exception:
+                    formatted = str(value)
+                logging.info(f"{tab}{key}:\t{formatted}")
+
     # Log the results
-    for key, value in result.items():
-        logging.info(f"{key}: {value}")
+    log_nested_result(result)
 
     return result
 

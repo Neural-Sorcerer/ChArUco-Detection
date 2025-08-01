@@ -8,8 +8,8 @@ import os
 import glob
 import logging
 import argparse
+from typing import *
 from time import time
-from typing import Tuple, Optional
 
 # === Third-Party Libraries ===
 import cv2

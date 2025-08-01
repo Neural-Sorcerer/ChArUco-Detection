@@ -7,7 +7,7 @@ visualizing the results, and saving the data for camera calibration.
 import os
 import argparse
 import logging
-from typing import Tuple, Dict, List, Optional, Any, Union
+from typing import *
 
 # === Third-Party Libraries ===
 import cv2
@@ -15,6 +15,7 @@ import numpy as np
 
 # === Local Modules ===
 from utils import util
+from src.calibration import CameraCalibrator
 from src.charuco_detector import CharucoDetector
 from configs.config import Resolution, CharucoBoardConfig, DetectorConfig, CharucoDetectorConfig
 
@@ -28,64 +29,68 @@ logging.basicConfig(
 logging = logging.getLogger(__name__)
 
 
-def process_frame(detector: CharucoDetector,
+def process_frame(args: argparse.Namespace,
                   frame: np.ndarray,
-                  draw_marker_corners: bool = True,
-                  draw_charuco_corners: bool = True,
-                  show_ids: bool = False,
-                  project_points: bool = False,
-                  evaluate_3d: bool = False,
-                  pose_matrix: Optional[np.ndarray] = None) -> None:
+                  detector: CharucoDetector) -> np.ndarray:
     """Process a single frame to detect and visualize Charuco board.
 
     Args:
-        detector: CharucoDetector instance
+        args: Command-line arguments
         frame: Input frame to process
-        draw_marker_corners: Whether to draw marker corners
-        draw_charuco_corners: Whether to draw Charuco corners
-        show_ids: Whether to show corner IDs
-        project_points: Whether to project 3D points to image plane
-        evaluate_3d: Whether to evaluate 3D consistency
-        pose_matrix: Optional pose matrix for 3D consistency evaluation
+        detector: CharucoDetector instance
     """
+    # Create synthetic camera parameters if not available
+    if detector.camera_matrix is None and detector.dist_coeffs is None:
+        height, width = frame.shape[:2]
+        detector.set_synthetic_camera_params((width, height), fov_deg=60)
+    
+    # Undistort image if fisheye model is used
+    if detector.fisheye:
+        calibrator = CameraCalibrator(detector, fisheye=detector.fisheye)
+        calibrator.camera_matrix = detector.camera_matrix
+        calibrator.dist_coeffs = detector.dist_coeffs
+        frame, new_camera_matrix = calibrator.undistort_image(frame, 0.0)
+        
+        detector.camera_matrix = new_camera_matrix
+        detector.dist_coeffs = np.zeros((1, 4))
+        detector.fisheye = False
+    
     # Detect Charuco board
     charuco_corners, charuco_ids, marker_corners, marker_ids = detector.detect_board(frame)
-
+    
     # Visualization
-    if marker_corners and draw_marker_corners:
-        detector.draw_detected_markers(frame, marker_corners, marker_ids)
+    if args.draw_charuco_markers_cv2:
+        detector.draw_detected_markers_cv2(frame, marker_corners, marker_ids)
 
-    # Check if Charuco corners are detected
-    if not (charuco_corners is not None and len(charuco_corners) > 0):
-        return
+    if args.draw_charuco_corners_cv2:
+        detector.draw_detected_corners_cv2(frame, charuco_corners, charuco_ids)
 
-    if draw_charuco_corners:
-        detector.draw_detected_corners(frame, charuco_corners, charuco_ids)
-
-    if show_ids:
-        detector.draw_corner_ids(frame, charuco_corners, charuco_ids)
+    # Set temporary object points
+    detector.set_temp_objpoints(charuco_ids)
+    # =======================================================
 
     # Estimate pose if camera parameters are available
-    success, rvec, tvec = detector.estimate_pose(charuco_corners, charuco_ids)
+    if args.use_estimate_pose_charuco_board:
+        objpoints_type = "all-corners"
+        success, rvec, tvec = detector.estimate_pose_CharucoBoard(charuco_corners, charuco_ids)
+    else:
+        objpoints_type = "temp"
+        success, rvec, tvec = detector.estimate_pose_solvePnP(charuco_corners, charuco_ids)
 
-    if not success:
-        return
+    if success:
+        # Draw axes
+        if args.draw_board_pose_cv2:
+            detector.draw_board_pose_cv2(frame, rvec, tvec, axis_length=0.2)
 
-    # Draw axes
-    detector.draw_axes(frame, rvec, tvec)
+        # Project 3D points to image plane
+        if args.project_points:
+            detector.project_points(frame, rvec, tvec, objpoints_type=objpoints_type)
+    
+    # Draw detected corners
+    if args.draw_charuco_corners:
+        detector.draw_detected_corners(frame, charuco_corners, charuco_ids)
 
-    # Project 3D points to image plane
-    if project_points:
-        detector.project_points(frame, rvec, tvec)
-
-    if evaluate_3d and pose_matrix is not None:
-        # Verify 3D consistency from moving one camera coordinate system to another
-        util.verify_consistency_3Dobjpoints(
-            detector.objpoint,
-            pose_matrix,
-            detector.board_config.size,
-            detector.board_config.square_length
-        )
+    return frame
 
 
 def run_pipeline(args: argparse.Namespace,
@@ -102,14 +107,6 @@ def run_pipeline(args: argparse.Namespace,
         resolution: Resolution for video capture
         winname: Window name for display
     """
-    # Auxiliary camera pose relative to origin camera pose (if needed)
-    pose_matrix = np.array([
-        [-0.99604347062072573,  -0.078366409130313411,  0.041905972770475794,   -0.29179406479883679    ],
-        [-0.020389427994994425, 0.66050204336743168,    0.75054734822893399,    -0.84698754658494668    ],
-        [-0.086496681207179654, 0.74672334678076591,    -0.65948659388396635,   1.6650489727770146      ],
-        [0.,                    0.,                     0.,                     1.                      ],
-    ]) if args.evaluate_3d else None
-
     # Check if input is an image file
     if os.path.isfile(args.index) and args.index.lower().endswith(('.png', '.jpg', '.jpeg')):
         # Read image from file
@@ -124,15 +121,7 @@ def run_pipeline(args: argparse.Namespace,
         cv2.resizeWindow(winname, width=Resolution.HD[0], height=Resolution.HD[1])
 
         # Process single image
-        process_frame(
-            detector, frame,
-            draw_marker_corners=args.draw_marker_corners,
-            draw_charuco_corners=args.draw_charuco_corners,
-            show_ids=args.show_ids,
-            project_points=args.project_points,
-            evaluate_3d=args.evaluate_3d,
-            pose_matrix=pose_matrix
-        )
+        frame = process_frame(args, frame, detector)
 
         # Show the frame
         cv2.imshow(winname, frame)
@@ -177,15 +166,7 @@ def run_pipeline(args: argparse.Namespace,
             frame = original.copy()
 
             # Process frame
-            process_frame(
-                detector, frame,
-                draw_marker_corners=args.draw_marker_corners,
-                draw_charuco_corners=args.draw_charuco_corners,
-                show_ids=args.show_ids,
-                project_points=args.project_points,
-                evaluate_3d=args.evaluate_3d,
-                pose_matrix=pose_matrix
-            )
+            frame = process_frame(args, frame, detector)
 
             # Show the frame
             cv2.imshow(winname, frame)
@@ -210,20 +191,27 @@ def run_pipeline(args: argparse.Namespace,
 def main() -> None:
     """Main function to run the Charuco detection pipeline."""
     # Default path for sample image
-    path = "assets/sample.png"
+    path = "assets/charuco_boards/charuco_board_7x7.png"
 
     # Parse command-line arguments
     parser = argparse.ArgumentParser(description="Charuco board detection for camera calibration")
-    parser.add_argument('--index', default=path, type=str, help='camera index, video file path, or image path')
-    parser.add_argument('--output-dir', default="outputs/charuco_detection", type=str, help='output path')
-    parser.add_argument('--save', action="store_true", help='save flag')
-    parser.add_argument('--save-all', action="store_true", help='save all frames flag')
-    parser.add_argument('--camera-params', type=str, default="assets/intrinsics.xml", help='path to camera calibration file')
-    parser.add_argument('--draw-marker-corners', action="store_true", default=True, help='draw marker corners')
-    parser.add_argument('--draw-charuco-corners', action="store_true", default=True, help='draw charuco corners')
-    parser.add_argument('--show-ids', action="store_true", default=False, help='show corner IDs')
-    parser.add_argument('--project-points', action="store_true", default=False, help='project 3D points to image plane')
-    parser.add_argument('--evaluate-3d', action="store_true", default=False, help='evaluate 3D consistency')
+    parser.add_argument('--index', default=path, type=str, help='Camera index, video file path, or image path')
+    parser.add_argument('--camera-params', default=None, type=str, help='Path to camera calibration file')
+    parser.add_argument('--fisheye', action="store_true", help='Is fisheye camera')
+    
+    # Visualization arguments
+    parser.add_argument('--draw-charuco-markers-cv2',
+                        action="store_true", default=False, help='Draw charuco markers (corner+id)')
+    parser.add_argument('--draw-charuco-corners-cv2',
+                        action="store_true", default=False, help='Draw charuco inner-corners (corner+id)')
+    parser.add_argument('--draw-board-pose-cv2',
+                        action="store_true", default=True, help='Draw board pose')
+    parser.add_argument('--use-estimate-pose-charuco-board',
+                        action="store_true", default=False, help='Use estimatePoseCharucoBoard')
+    parser.add_argument('--draw-charuco-corners',
+                        action="store_true", default=True, help='Draw charuco inner-corners (id)')
+    parser.add_argument('--project-points',
+                        action="store_true", default=True, help='Project 3D points to image plane')
 
     # Charuco board arguments
     parser.add_argument('--board-id', type=int, default=0, help='Charuco board ID')
@@ -231,6 +219,11 @@ def main() -> None:
     parser.add_argument('--y-squares', type=int, default=7, help='Number of squares in Y direction')
     parser.add_argument('--square-length', type=float, default=0.10, help='Square length in meters')
     parser.add_argument('--marker-length', type=float, default=None, help='Marker length in meters (default: 75% of square length)')
+
+    # Output arguments
+    parser.add_argument('--output-dir', default="outputs/charuco_detection", type=str, help='Output path')
+    parser.add_argument('--save', action="store_true", default=False, help='Save flag')
+    parser.add_argument('--save-all', action="store_true", default=False, help='Save all frames flag')
     args = parser.parse_args()
 
     # Create configurations
@@ -245,7 +238,7 @@ def main() -> None:
     charuco_detector_config = CharucoDetectorConfig()
 
     # Create detector
-    detector = CharucoDetector(board_config, detector_config, charuco_detector_config)
+    detector = CharucoDetector(board_config, detector_config, charuco_detector_config, args.fisheye)
 
     # Load camera parameters if provided
     if args.camera_params and os.path.isfile(args.camera_params):

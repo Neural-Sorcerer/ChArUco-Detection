@@ -71,6 +71,18 @@ class CharucoDetector:
         self.dist_coeffs = None
         self.fisheye = fisheye
 
+    def set_temp_objpoints(self, charuco_ids: np.ndarray):
+        """Set temporary object points for current board.
+
+        Args:
+            charuco_ids: IDs of detected Charuco corners
+        """
+        try:
+            self.objpoints["temp"] = self.objpoints["inner-corners"][charuco_ids.flatten()]
+        
+        except Exception as e:
+            logging.error(f"❌ Error during setting temporary object points: {str(e)}")
+    
     def set_camera_params(self, camera_matrix: np.ndarray, dist_coeffs: np.ndarray) -> None:
         """Set camera intrinsic parameters.
 
@@ -81,6 +93,40 @@ class CharucoDetector:
         self.camera_matrix = camera_matrix
         self.dist_coeffs = dist_coeffs
 
+    def set_synthetic_camera_params(self, resolution: np.ndarray, fov_deg: float = None) -> None:
+        """Set synthetic camera intrinsic parameters.
+
+        Args:
+            resolution: Image resolution (width, height)
+            fov_deg: Field of view of the camera in degrees (default: None)
+        """
+        try:
+            width = resolution[0]
+            height = resolution[1]
+            
+            # Principal point at the center of the image
+            cx = width / 2
+            cy = height / 2
+            
+            # Calculate focal length from FOV
+            if fov_deg is not None:
+                fov_rad = np.deg2rad(fov_deg)
+                fx = fy = width / (2 * np.tan(fov_rad / 2)) # ≈ 1662.0
+            else:
+                fx = fy = 1000.0    # Arbitrary focal length in pixels (you define it)
+
+            # Set camera matrix and distortion coefficients
+            self.camera_matrix = np.array([
+                [fx,  0, cx],
+                [0,  fy, cy],
+                [0,   0,  1]
+            ], dtype=np.float64)
+            self.dist_coeffs = np.zeros((4, 1), dtype=np.float64)
+            
+            logging.info(f"✅ Synthetic camera parameters set.")
+        except Exception as e:
+            logging.error(f"❌ Error setting synthetic camera parameters: {str(e)}")
+    
     def load_camera_params(self, file_path: str) -> bool:
         """Load camera intrinsic parameters from a file.
 
@@ -237,18 +283,6 @@ class CharucoDetector:
             logging.error(f"❌ Error estimating pose: {str(e)}")
             return False, None, None
 
-    def set_temp_objpoints(self, charuco_ids: np.ndarray):
-        """Set temporary object points for current board.
-
-        Args:
-            charuco_ids: IDs of detected Charuco corners
-        """
-        try:
-            self.objpoints["temp"] = self.objpoints["inner-corners"][charuco_ids.flatten()]
-        
-        except Exception as e:
-            logging.error(f"❌ Error during setting temporary object points: {str(e)}")
-        
     def estimate_pose_solvePnP(self,
                                charuco_corners: np.ndarray,
                                charuco_ids: np.ndarray
@@ -318,28 +352,37 @@ class CharucoDetector:
                        color: Tuple[int, int, int] = (0, 0, 255),
                        radius: int = 5
                        ) -> None:
-        """Project 3D points to image plane and draw them.
+        """Project 3D points to image plane.
 
         Args:
             frame: Input frame to draw on
             rvec: Rotation vector
             tvec: Translation vector
+            objpoints_type: Type of object points to project
             color: Color to draw points (BGR)
             radius: Radius of points to draw
         """
-        # Project 3D points to image plane
-        imgpoints_proj = util.project_points_to_image(
-            self.objpoints[objpoints_type],
-            rvec,
-            tvec,
-            self.camera_matrix,
-            self.dist_coeffs,
-            self.fisheye
-        )
-
+        if self.fisheye:
+            proj_points, _ = cv2.fisheye.projectPoints(
+                self.objpoints[objpoints_type],
+                rvec,
+                tvec,
+                self.camera_matrix,
+                self.dist_coeffs,
+            )
+        else:
+            proj_points, _ = cv2.projectPoints(
+                self.objpoints[objpoints_type],
+                rvec,
+                tvec,
+                self.camera_matrix,
+                self.dist_coeffs,
+            )
+        proj_points = proj_points.reshape(-1, 2)
+        
         # Draw projected points
-        for imgpoint in imgpoints_proj:
-            cv2.circle(frame, (int(imgpoint[0]), int(imgpoint[1])), radius, color, -1)
+        for p in proj_points:
+            cv2.circle(frame, (int(p[0]), int(p[1])), radius, color, -1)
 
     def generate_board_image(self,
                              pixels_per_square: int = 300,

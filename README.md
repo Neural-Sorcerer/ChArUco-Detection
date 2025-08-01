@@ -26,7 +26,7 @@ A comprehensive toolkit for Charuco board detection, visualization, and camera c
 conda create --name charuco python=3.11 -y
 conda activate charuco
 pip install opencv-contrib-python==4.11.0.86
-pip install matplotlib
+pip install matplotlib PyYAML
 ```
 
 ## Project Structure

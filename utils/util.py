@@ -108,7 +108,8 @@ def project_points_to_image(
     rvec: np.ndarray,
     tvec: np.ndarray,
     camera_matrix: np.ndarray,
-    dist_coeffs: np.ndarray
+    dist_coeffs: np.ndarray,
+    is_fisheye: bool = False
 ) -> np.ndarray:
     """Project 3D points to image plane.
 
@@ -118,17 +119,27 @@ def project_points_to_image(
         tvec: Translation vector
         camera_matrix: 3x3 camera intrinsic matrix
         dist_coeffs: Distortion coefficients
+        is_fisheye: True if fisheye model is used
 
     Returns:
         imgpoints_proj: Nx2 array of projected 2D points
     """
-    imgpoints_proj, _ = cv2.projectPoints(
-        objpoint.astype(np.float32),
-        rvec.astype(np.float32),
-        tvec.astype(np.float32),
-        camera_matrix.astype(np.float32),
-        dist_coeffs.astype(np.float32)
-    )
+    if is_fisheye:
+        imgpoints_proj, _ = cv2.fisheye.projectPoints(
+            objpoint,
+            rvec,
+            tvec,
+            camera_matrix,
+            dist_coeffs
+        )
+    else:
+        imgpoints_proj, _ = cv2.projectPoints(
+            objpoint,
+            rvec,
+            tvec,
+            camera_matrix,
+            dist_coeffs
+        )
     imgpoints_proj = imgpoints_proj.reshape(-1, 2)
     return imgpoints_proj
 

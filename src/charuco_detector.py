@@ -29,7 +29,8 @@ class CharucoDetector:
         self,
         board_config: CharucoBoardConfig,
         detector_config: DetectorConfig,
-        charuco_detector_config: CharucoDetectorConfig
+        charuco_detector_config: CharucoDetectorConfig,
+        fisheye: bool = False
     ):
         """Initialize the CharucoDetector.
 
@@ -37,7 +38,7 @@ class CharucoDetector:
             board_config: Configuration for the Charuco board
             detector_config: Configuration for the Aruco detector
             charuco_detector_config: Configuration for the Charuco detector
-        """
+        """        
         self.board_config = board_config
         self.detector_config = detector_config
         self.charuco_detector_config = charuco_detector_config
@@ -54,14 +55,21 @@ class CharucoDetector:
         )
 
         # Prepare object points (3D points in real-world space)
-        self.objp = np.zeros((board_config.x_squares * board_config.y_squares, 3), np.float32)
-        self.objp[:, :2] = np.mgrid[0:board_config.x_squares, 0:board_config.y_squares].T.reshape(-1, 2)
-        self.objp *= board_config.square_length  # Scale according to real square size
-        self.objpoint = self.objp.astype(np.float32).reshape(-1, 1, 3)
+        self.obj_names = {"inner-corners": -1, "squares": 0, "all-corners": 1}
+        self.objpoints = {"inner-corners": None, "squares": None, "all-corners": None, "temp": None}
+        for key, value in self.obj_names.items():
+            x_squares = board_config.x_squares + value
+            y_squares = board_config.y_squares + value
+            
+            objp = np.zeros((x_squares * y_squares, 3), np.float64)
+            objp[:, :2] = np.mgrid[0:x_squares, 0:y_squares].T.reshape(-1, 2)
+            objp *= board_config.square_length  # Scale according to real square size
+            self.objpoints[key] = objp.astype(np.float64).reshape(-1, 1, 3)
 
         # Camera parameters
         self.camera_matrix = None
         self.dist_coeffs = None
+        self.fisheye = fisheye
 
     def set_camera_params(self, camera_matrix: np.ndarray, dist_coeffs: np.ndarray) -> None:
         """Set camera intrinsic parameters.
@@ -119,11 +127,11 @@ class CharucoDetector:
             logging.error(f"❌ Error detecting Charuco board: {str(e)}")
             return None, None, None, None
 
-    def draw_detected_markers(self,
-                              frame: np.ndarray,
-                              marker_corners: List[np.ndarray],
-                              marker_ids: np.ndarray,
-                              color: Tuple[int, int, int] = (0, 255, 255)) -> None:
+    def draw_detected_markers_cv2(self,
+                                  frame: np.ndarray,
+                                  marker_corners: List[np.ndarray],
+                                  marker_ids: np.ndarray,
+                                  color: Tuple[int, int, int] = (0, 255, 255)) -> None:
         """Draw detected markers on the frame.
 
         Args:
@@ -135,12 +143,12 @@ class CharucoDetector:
         if marker_corners and len(marker_corners) > 0:
             cv2.aruco.drawDetectedMarkers(frame, marker_corners, marker_ids, borderColor=color)
 
-    def draw_detected_corners(self,
-                              frame: np.ndarray,
-                              charuco_corners: np.ndarray,
-                              charuco_ids: np.ndarray,
-                              color: Tuple[int, int, int] = (255, 255, 0)) -> None:
-        """Draw detected Charuco corners on the frame.
+    def draw_detected_corners_cv2(self,
+                                  frame: np.ndarray,
+                                  charuco_corners: np.ndarray,
+                                  charuco_ids: np.ndarray,
+                                  color: Tuple[int, int, int] = (255, 255, 0)) -> None:
+        """Draw detected Charuco inner-corners on the frame.
 
         Args:
             frame: Input frame to draw on
@@ -151,14 +159,16 @@ class CharucoDetector:
         if (charuco_corners is not None) and (len(charuco_corners) > 0):
             cv2.aruco.drawDetectedCornersCharuco(frame, charuco_corners, charuco_ids, cornerColor=color)
 
-    def draw_corner_ids(self,
-                        frame: np.ndarray,
-                        charuco_corners: np.ndarray,
-                        charuco_ids: np.ndarray,
-                        font_scale: float = 0.7,
-                        color: Tuple[int, int, int] = (255, 255, 0),
-                        thickness: int = 2) -> None:
-        """Draw corner IDs on the frame.
+    def draw_detected_corners(self,
+                              frame: np.ndarray,
+                              charuco_corners: np.ndarray,
+                              charuco_ids: np.ndarray,
+                              font_scale: float = 0.7,
+                              font_color: Tuple[int, int, int] = (255, 255, 0),
+                              thickness: int = 2,
+                              point_color: Tuple[int, int, int] = (0, 255, 0),
+                              point_radius: int = 5) -> None:
+        """Draw inner-corner IDs on the frame.
 
         Args:
             frame: Input frame to draw on
@@ -176,14 +186,15 @@ class CharucoDetector:
                             org,
                             cv2.FONT_HERSHEY_SIMPLEX,
                             font_scale,
-                            color,
+                            font_color,
                             thickness,
                             cv2.LINE_AA)
+                cv2.circle(frame, org, point_radius, point_color, -1)
 
-    def estimate_pose(self,
-                      charuco_corners: np.ndarray,
-                      charuco_ids: np.ndarray
-                      ) -> Tuple[bool, Optional[np.ndarray], Optional[np.ndarray]]:
+    def estimate_pose_CharucoBoard(self,
+                                   charuco_corners: np.ndarray,
+                                   charuco_ids: np.ndarray
+                                   ) -> Tuple[bool, Optional[np.ndarray], Optional[np.ndarray]]:
         """Estimate pose of the Charuco board.
 
         Args:
@@ -206,7 +217,7 @@ class CharucoDetector:
             return False, None, None
 
         try:
-            ret, rvec, tvec = cv2.aruco.estimatePoseCharucoBoard(
+            success, rvec, tvec = cv2.aruco.estimatePoseCharucoBoard(
                 charuco_corners,
                 charuco_ids,
                 self.board_config.board,
@@ -216,9 +227,9 @@ class CharucoDetector:
                 None
             )
 
-            if ret:
-                rvec = np.array(rvec, dtype=np.float32)
-                tvec = np.array(tvec, dtype=np.float32)
+            if success:
+                rvec = np.array(rvec, dtype=np.float64)
+                tvec = np.array(tvec, dtype=np.float64)
                 return True, rvec, tvec
             else:
                 return False, None, None
@@ -226,7 +237,65 @@ class CharucoDetector:
             logging.error(f"❌ Error estimating pose: {str(e)}")
             return False, None, None
 
-    def draw_axes(self,
+    def set_temp_objpoints(self, charuco_ids: np.ndarray):
+        """Set temporary object points for current board.
+
+        Args:
+            charuco_ids: IDs of detected Charuco corners
+        """
+        try:
+            self.objpoints["temp"] = self.objpoints["inner-corners"][charuco_ids.flatten()]
+        
+        except Exception as e:
+            logging.error(f"❌ Error during setting temporary object points: {str(e)}")
+        
+    def estimate_pose_solvePnP(self,
+                               charuco_corners: np.ndarray,
+                               charuco_ids: np.ndarray
+                               ) -> Tuple[bool, Optional[np.ndarray], Optional[np.ndarray]]:
+        """Estimate pose of the Charuco board.
+
+        Args:
+            charuco_corners: Detected Charuco corners
+            charuco_ids: IDs of detected Charuco corners
+
+        Returns:
+            Tuple containing:
+                - success: True if pose estimation was successful
+                - rvec: Rotation vector (None if estimation failed)
+                - tvec: Translation vector (None if estimation failed)
+        """
+        if (
+            (self.camera_matrix is None) or
+            (self.dist_coeffs is None) or
+            (charuco_corners is None) or
+            (charuco_ids is None) or
+            (len(charuco_corners) < 4)
+        ):
+            return False, None, None
+
+        try:
+            success, rvec, tvec = cv2.solvePnP(
+                self.objpoints["temp"],
+                charuco_corners,
+                self.camera_matrix,
+                self.dist_coeffs,
+                None,
+                None,
+                flags=cv2.SOLVEPNP_ITERATIVE
+            )
+
+            if success:
+                rvec = np.array(rvec, dtype=np.float64)
+                tvec = np.array(tvec, dtype=np.float64)
+                return True, rvec, tvec
+            else:
+                return False, None, None
+        except Exception as e:
+            logging.error(f"❌ Error estimating pose: {str(e)}")
+            return False, None, None
+    
+    def draw_board_pose_cv2(self,
                   frame: np.ndarray,
                   rvec: np.ndarray,
                   tvec: np.ndarray,
@@ -245,8 +314,10 @@ class CharucoDetector:
                        frame: np.ndarray,
                        rvec: np.ndarray,
                        tvec: np.ndarray,
+                       objpoints_type: str = "inner-corners",
                        color: Tuple[int, int, int] = (0, 0, 255),
-                       radius: int = 5) -> None:
+                       radius: int = 5
+                       ) -> None:
         """Project 3D points to image plane and draw them.
 
         Args:
@@ -258,7 +329,13 @@ class CharucoDetector:
         """
         # Project 3D points to image plane
         imgpoints_proj = util.project_points_to_image(
-            self.objpoint, rvec, tvec, self.camera_matrix, self.dist_coeffs)
+            self.objpoints[objpoints_type],
+            rvec,
+            tvec,
+            self.camera_matrix,
+            self.dist_coeffs,
+            self.fisheye
+        )
 
         # Draw projected points
         for imgpoint in imgpoints_proj:

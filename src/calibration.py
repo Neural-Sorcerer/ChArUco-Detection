@@ -362,7 +362,7 @@ class CameraCalibrator:
         """
         if (self.camera_matrix is None) or (self.dist_coeffs is None):
             logging.error(f"❌ No calibration data available")
-            return image
+            return image, None
 
         R = np.eye(3)
         m1type = cv2.CV_16SC2
@@ -445,4 +445,4 @@ class CameraCalibrator:
                     borderMode=cv2.BORDER_CONSTANT
                 )
 
-        return undistorted
+        return undistorted, new_camera_matrix

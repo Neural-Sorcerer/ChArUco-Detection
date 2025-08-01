@@ -2,6 +2,8 @@
 Cam_001/
 outputs*/
 calibration_images*/
+temp*/
+Q/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

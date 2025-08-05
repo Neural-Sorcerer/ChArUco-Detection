@@ -28,12 +28,12 @@ objp *= SQUARE_SIZE_TV_BIG     # Scale according to real square size
 objp_tv_big = np.zeros((CHECKERBOARD_TV[0] * CHECKERBOARD_TV[1], 3), np.float32)
 objp_tv_big[:, :2] = np.mgrid[0:CHECKERBOARD_TV[0], 0:CHECKERBOARD_TV[1]].T.reshape(-1, 2)
 objp_tv_big *= SQUARE_SIZE_TV_BIG     # Scale according to real square size
-objp_tv_big[:, :2] = objp_tv_big[:, :2] - SQUARE_SIZE_TV_BIG/2     # translate
+objp_tv_big[:, :2] = objp_tv_big[:, :2] - (SQUARE_SIZE_TV_BIG * 0.5)     # translate
 
 objp_tv_small = np.zeros((CHECKERBOARD_TV[0] * CHECKERBOARD_TV[1], 3), np.float32)
 objp_tv_small[:, :2] = np.mgrid[0:CHECKERBOARD_TV[0], 0:CHECKERBOARD_TV[1]].T.reshape(-1, 2)
 objp_tv_small *= SQUARE_SIZE_TV_SMALL     # Scale according to real square size
-objp_tv_small[:, :2] = objp_tv_small[:, :2] - SQUARE_SIZE_TV_SMALL/2     # translate
+objp_tv_small[:, :2] = objp_tv_small[:, :2] - (SQUARE_SIZE_TV_SMALL * 0.5)     # translate
 
 
 def load_camera_calibration(yaml_path: Path) -> Dict[str, Dict[str, Any]]:

@@ -28,7 +28,7 @@ objp *= SQUARE_SIZE     # Scale according to real square size
 objp_tv = np.zeros((CHECKERBOARD_TV[0] * CHECKERBOARD_TV[1], 3), np.float32)
 objp_tv[:, :2] = np.mgrid[0:CHECKERBOARD_TV[0], 0:CHECKERBOARD_TV[1]].T.reshape(-1, 2)
 objp_tv *= SQUARE_SIZE     # Scale according to real square size
-objp_tv[:, :2] = objp_tv[:, :2] - SQUARE_SIZE/2     # translate
+objp_tv[:, :2] = objp_tv[:, :2] - (SQUARE_SIZE * 0.5)     # translate
 
 
 def load_camera_calibration(yaml_path: Path) -> Dict[str, Dict[str, Any]]:
@@ -272,7 +272,7 @@ def pipeline(path, camera_matrix, dist_coeffs, freeze=0, verbose=False):
     if verbose:
         # Draw and display corners
         cv2.drawChessboardCorners(img, CHECKERBOARD, imgpoints, ret)
-        cv2.drawFrameAxes(img, camera_matrix, dist_coeffs, rvec, tvec, 0.3, thickness=3)
+        cv2.drawFrameAxes(img, camera_matrix, dist_coeffs, rvec, tvec, 300, thickness=3)
         cv2.imshow(winname, img)
         cv2.waitKey(freeze)
         cv2.destroyAllWindows()

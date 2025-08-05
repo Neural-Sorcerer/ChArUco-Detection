@@ -16,12 +16,6 @@ SQUARE_SIZE_TV_SMALL = 90     # Real-world square size in mm
 CHECKERBOARD = (15, 8)
 CHECKERBOARD_TV = (17, 10)
 
-""" cm
-TV1: widht=7.6 height=8.1    90  Fail
-TV2: widht=8.9 height=9.5   105  Fail
-TV3: widht=9.0 height=9.0    90  OK
-"""
-
 # Prepare object points (3D points in real-world space)
 objp = np.zeros((CHECKERBOARD[0] * CHECKERBOARD[1], 3), np.float32)
 objp[:, :2] = np.mgrid[0:CHECKERBOARD[0], 0:CHECKERBOARD[1]].T.reshape(-1, 2)
@@ -30,12 +24,10 @@ objp *= SQUARE_SIZE_TV_BIG     # Scale according to real square size
 objp_tv_big = np.zeros((CHECKERBOARD_TV[0] * CHECKERBOARD_TV[1], 3), np.float32)
 objp_tv_big[:, :2] = np.mgrid[0:CHECKERBOARD_TV[0], 0:CHECKERBOARD_TV[1]].T.reshape(-1, 2)
 objp_tv_big *= SQUARE_SIZE_TV_BIG     # Scale according to real square size
-objp_tv_big[:, :2] = objp_tv_big[:, :2] - SQUARE_SIZE_TV_BIG * 0     # translate
 
 objp_tv_small = np.zeros((CHECKERBOARD_TV[0] * CHECKERBOARD_TV[1], 3), np.float32)
 objp_tv_small[:, :2] = np.mgrid[0:CHECKERBOARD_TV[0], 0:CHECKERBOARD_TV[1]].T.reshape(-1, 2)
 objp_tv_small *= SQUARE_SIZE_TV_SMALL     # Scale according to real square size
-objp_tv_small[:, :2] = objp_tv_small[:, :2] - SQUARE_SIZE_TV_SMALL * 0     # translate
 
 
 def load_camera_calibration(yaml_path: Path) -> Dict[str, Dict[str, Any]]:
@@ -278,6 +270,7 @@ def pipeline(path, objp_tvs, dst_camera_matrix, dst_dist_coeffs, rvec_obj_in_dst
     if verbose:
         cv2.drawFrameAxes(img, dst_camera_matrix, dst_dist_coeffs, rvec_obj_in_dst_cam, tvec_obj_in_dst_cam, 300, thickness=3)
         cv2.imshow(winname, img)
+        cv2.imwrite(f"{rvec_obj_in_dst_cam[0][0]}.png", img)
         cv2.waitKey(freeze)
         cv2.destroyAllWindows()
 

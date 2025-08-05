@@ -5,17 +5,15 @@ visualizing the results, and saving the data for camera calibration.
 """
 # === Standard Libraries ===
 import os
-import argparse
 import logging
+import argparse
 from typing import *
 
 # === Third-Party Libraries ===
 import cv2
-import numpy as np
 
 # === Local Modules ===
 from utils import util
-from src.calibration import CameraCalibrator
 from src.charuco_detector import CharucoDetector
 from configs.config import Resolution, CharucoBoardConfig, DetectorConfig, CharucoDetectorConfig
 
@@ -24,73 +22,9 @@ from configs.config import Resolution, CharucoBoardConfig, DetectorConfig, Charu
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s:%(lineno)02d - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'  # Removes milliseconds
+    datefmt='%Y-%m-%d %H:%M:%S'
 )
 logging = logging.getLogger(__name__)
-
-
-def process_frame(args: argparse.Namespace,
-                  frame: np.ndarray,
-                  detector: CharucoDetector) -> np.ndarray:
-    """Process a single frame to detect and visualize Charuco board.
-
-    Args:
-        args: Command-line arguments
-        frame: Input frame to process
-        detector: CharucoDetector instance
-    """
-    # Create synthetic camera parameters if not available
-    if detector.camera_matrix is None and detector.dist_coeffs is None:
-        height, width = frame.shape[:2]
-        detector.set_synthetic_camera_params((width, height), fov_deg=60)
-    
-    # Undistort image if fisheye model is used
-    if detector.fisheye:
-        calibrator = CameraCalibrator(detector, fisheye=detector.fisheye)
-        calibrator.camera_matrix = detector.camera_matrix
-        calibrator.dist_coeffs = detector.dist_coeffs
-        frame, new_camera_matrix = calibrator.undistort_image(frame, 0.0)
-        
-        detector.camera_matrix = new_camera_matrix
-        detector.dist_coeffs = np.zeros((1, 4))
-        detector.fisheye = False
-    
-    # Detect Charuco board
-    charuco_corners, charuco_ids, marker_corners, marker_ids = detector.detect_board(frame)
-    
-    # Visualization
-    if args.draw_charuco_markers_cv2:
-        detector.draw_detected_markers_cv2(frame, marker_corners, marker_ids)
-
-    if args.draw_charuco_corners_cv2:
-        detector.draw_detected_corners_cv2(frame, charuco_corners, charuco_ids)
-
-    # Set temporary object points
-    detector.set_temp_objpoints(charuco_ids)
-    # =======================================================
-
-    # Estimate pose if camera parameters are available
-    if args.use_estimate_pose_charuco_board:
-        objpoints_type = "all-corners"
-        success, rvec, tvec = detector.estimate_pose_CharucoBoard(charuco_corners, charuco_ids)
-    else:
-        objpoints_type = "temp"
-        success, rvec, tvec = detector.estimate_pose_solvePnP(charuco_corners, charuco_ids)
-
-    if success:
-        # Draw axes
-        if args.draw_board_pose_cv2:
-            detector.draw_board_pose_cv2(frame, rvec, tvec, axis_length=0.2)
-
-        # Project 3D points to image plane
-        if args.project_points:
-            detector.project_points(frame, rvec, tvec, objpoints_type=objpoints_type)
-    
-    # Draw detected corners
-    if args.draw_charuco_corners:
-        detector.draw_detected_corners(frame, charuco_corners, charuco_ids)
-    
-    return frame
 
 
 def run_pipeline(args: argparse.Namespace,
@@ -121,7 +55,7 @@ def run_pipeline(args: argparse.Namespace,
         cv2.resizeWindow(winname, width=Resolution.HD[0], height=Resolution.HD[1])
 
         # Process single image
-        frame = process_frame(args, frame, detector)
+        frame = detector.run_charuco_pipeline(frame)
 
         # Show the frame
         cv2.imshow(winname, frame)
@@ -166,7 +100,7 @@ def run_pipeline(args: argparse.Namespace,
             frame = original.copy()
 
             # Process frame
-            frame = process_frame(args, frame, detector)
+            frame = detector.run_charuco_pipeline(frame)
 
             # Show the frame
             cv2.imshow(winname, frame)
@@ -180,7 +114,7 @@ def run_pipeline(args: argparse.Namespace,
                 freeze = 0 if freeze else 1
             # Save images
             elif (key == ord('s') and args.save) or args.save_all:
-                util.save_frame(original, args.output_dir, frame_id, annotated=frame)
+                util.save_frame(original, frame, args.output_dir, frame_id)
                 frame_id += 1
 
         # Destroy all the windows
@@ -191,13 +125,15 @@ def run_pipeline(args: argparse.Namespace,
 def main() -> None:
     """Main function to run the Charuco detection pipeline."""
     # Default path for sample image
-    path = "assets/charuco_boards/charuco_board_7x7.png"
+    # path = "assets/charuco_boards/charuco_board_7x7.png"
+    path = "calibration_images/calibration_images_0/calib_0039.png"
+    intrinsics = "calibration_images/calibration_images_0/calibration.xml"
 
     # Parse command-line arguments
     parser = argparse.ArgumentParser(description="Charuco board detection for camera calibration")
     parser.add_argument('--index', default=path, type=str, help='Camera index, video file path, or image path')
-    parser.add_argument('--camera-params', default=None, type=str, help='Path to camera calibration file')
-    parser.add_argument('--fisheye', action="store_true", help='Is fisheye camera')
+    parser.add_argument('--camera-params', default=intrinsics, type=str, help='Path to camera calibration file')
+    parser.add_argument('--resolution', type=str, default='FHD', choices=['SS', 'SD', 'HD', 'FHD', 'UHD', 'OMS'], help='Camera resolution')
     
     # Visualization arguments
     parser.add_argument('--draw-charuco-markers-cv2',
@@ -238,11 +174,7 @@ def main() -> None:
     charuco_detector_config = CharucoDetectorConfig()
 
     # Create detector
-    detector = CharucoDetector(board_config, detector_config, charuco_detector_config, args.fisheye)
-
-    # Load camera parameters if provided
-    if args.camera_params and os.path.isfile(args.camera_params):
-        detector.load_camera_params(args.camera_params)
+    detector = CharucoDetector(args, board_config, detector_config, charuco_detector_config)
 
     # Run the pipeline
     run_pipeline(args, detector)

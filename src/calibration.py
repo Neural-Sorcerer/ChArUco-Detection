@@ -15,14 +15,11 @@ import xml.etree.ElementTree as ET
 import cv2
 import numpy as np
 
-# === Local Modules ===
-from src.charuco_detector import CharucoDetector
-
 
 class CameraCalibrator:
     """Class for calibrating cameras using Charuco boards."""
 
-    def __init__(self, detector: CharucoDetector, fisheye: bool = False):
+    def __init__(self, detector: object, fisheye: bool = False):
         """Initialize the CameraCalibrator.
 
         Args:
@@ -354,7 +351,12 @@ class CameraCalibrator:
             reprojection_error = float(reprojection_error_elem.text) if reprojection_error_elem is not None else None
 
             logging.info(f"✅ Calibration parameters loaded from {file_path}")
-            return camera_matrix, dist_coeffs, image_size, fisheye, reprojection_error
+            
+            return {"camera_matrix": camera_matrix,
+                    "dist_coeffs": dist_coeffs,
+                    "image_size": image_size,
+                    "fisheye": fisheye,
+                    "reprojection_error": reprojection_error}
 
         except Exception as e:
             logging.error(f"❌ Failed to load calibration from {file_path}: {str(e)}")

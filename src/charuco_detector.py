@@ -6,16 +6,16 @@ as well as visualizing the results.
 # === Standard Libraries ===
 import os
 import logging
+import argparse
 from typing import *
-import xml.etree.ElementTree as ET
 
 # === Third-Party Libraries ===
 import cv2
 import numpy as np
 
 # === Local Modules ===
-from utils import util
-from configs.config import CharucoBoardConfig, DetectorConfig, CharucoDetectorConfig
+from src.calibration import CameraCalibrator
+from configs.config import Resolution, CharucoBoardConfig, DetectorConfig, CharucoDetectorConfig
 
 
 class CharucoDetector:
@@ -27,18 +27,20 @@ class CharucoDetector:
 
     def __init__(
         self,
+        args: argparse.Namespace,
         board_config: CharucoBoardConfig,
         detector_config: DetectorConfig,
         charuco_detector_config: CharucoDetectorConfig,
-        fisheye: bool = False
     ):
         """Initialize the CharucoDetector.
 
         Args:
+            args: Command-line arguments
             board_config: Configuration for the Charuco board
             detector_config: Configuration for the Aruco detector
             charuco_detector_config: Configuration for the Charuco detector
-        """        
+        """       
+        self.args = args
         self.board_config = board_config
         self.detector_config = detector_config
         self.charuco_detector_config = charuco_detector_config
@@ -53,7 +55,7 @@ class CharucoDetector:
             detectorParams=self.detector_params,
             charucoParams=self.charuco_params
         )
-
+        
         # Prepare object points (3D points in real-world space)
         self.obj_names = {"inner-corners": -1, "squares": 0, "all-corners": 1}
         self.objpoints = {"inner-corners": None, "squares": None, "all-corners": None, "temp": None}
@@ -69,8 +71,16 @@ class CharucoDetector:
         # Camera parameters
         self.camera_matrix = None
         self.dist_coeffs = None
-        self.fisheye = fisheye
-
+        self.image_size = None
+        self.fisheye = None
+        self.reprojection_error = None
+        
+        self.rvec_obj_in_dst_cam = None
+        self.tvec_obj_in_dst_cam = None
+        
+        # Load camera parameters if provided
+        self.set_camera_params()
+    
     def set_temp_objpoints(self, charuco_ids: np.ndarray):
         """Set temporary object points for current board.
 
@@ -83,17 +93,40 @@ class CharucoDetector:
         except Exception as e:
             logging.error(f"❌ Error during setting temporary object points: {str(e)}")
     
-    def set_camera_params(self, camera_matrix: np.ndarray, dist_coeffs: np.ndarray) -> None:
+    def set_camera_params(self) -> None:
+        """Set camera intrinsic parameters."""
+        try:
+            # Load camera parameters
+            if self.args.camera_params is None:
+                # Create synthetic camera parameters if not available
+                if (self.camera_matrix is None) and (self.dist_coeffs is None):
+                    self.set_synthetic_camera_params(fov_deg=60)
+            else:
+                params = CameraCalibrator.load_calibration_parameters(self.args.camera_params)
+                
+                self.camera_matrix = params["camera_matrix"]
+                self.dist_coeffs = params["dist_coeffs"]
+                self.image_size = params["image_size"]
+                self.fisheye = params["fisheye"]
+                self.reprojection_error = params["reprojection_error"]
+                
+        except Exception as e:
+            logging.error(f"❌ Error loading camera parameters: {str(e)}")
+    
+    def reset_camera_params(self, new_image_size, new_camera_matrix) -> None:
         """Set camera intrinsic parameters.
 
         Args:
-            camera_matrix (K): 3x3 camera intrinsic matrix
-            dist_coeffs (D): Distortion coefficients
+            new_image_size: New image size
+            new_camera_matrix: New camera matrix
         """
-        self.camera_matrix = camera_matrix
-        self.dist_coeffs = dist_coeffs
-
-    def set_synthetic_camera_params(self, resolution: np.ndarray, fov_deg: float = None) -> None:
+        self.camera_matrix = new_camera_matrix
+        self.dist_coeffs = np.zeros((1, 4))
+        self.image_size = new_image_size
+        self.fisheye = False
+        self.reprojection_error = None
+        
+    def set_synthetic_camera_params(self, resolution: np.ndarray = None, fov_deg: float = None) -> None:
         """Set synthetic camera intrinsic parameters.
 
         Args:
@@ -101,9 +134,12 @@ class CharucoDetector:
             fov_deg: Field of view of the camera in degrees (default: None)
         """
         try:
-            width = resolution[0]
-            height = resolution[1]
-            
+            if resolution is not None:
+                width = resolution[0]
+                height = resolution[1]
+            else:
+                width, height = getattr(Resolution,  self.args.resolution)
+                
             # Principal point at the center of the image
             cx = width / 2
             cy = height / 2
@@ -123,25 +159,9 @@ class CharucoDetector:
             ], dtype=np.float64)
             self.dist_coeffs = np.zeros((4, 1), dtype=np.float64)
             
-            logging.info(f"✅ Synthetic camera parameters set.")
+            logging.info(f"✅ Synthetic camera parameters set for resolution {self.args.resolution}.")
         except Exception as e:
             logging.error(f"❌ Error setting synthetic camera parameters: {str(e)}")
-    
-    def load_camera_params(self, file_path: str) -> bool:
-        """Load camera intrinsic parameters from a file.
-
-        Args:
-            file_path: Path to the camera parameter file
-
-        Returns:
-            True if parameters were loaded successfully, False otherwise
-        """
-        try:
-            self.camera_matrix, self.dist_coeffs = util.load_camera_params(file_path)
-            return True
-        except (FileNotFoundError, ET.ParseError, ValueError) as e:
-            logging.error(f"❌ Failed to load camera parameters: {str(e)}")
-            return False
 
     def detect_board(self, frame: np.ndarray) -> Tuple[Optional[np.ndarray],
                                                        Optional[np.ndarray],
@@ -448,3 +468,201 @@ class CharucoDetector:
         except Exception as e:
             logging.error(f"❌ Error saving board image: {str(e)}")
             return False
+
+    def run_charuco_pipeline(self, frame: np.ndarray) -> np.ndarray:
+        """Process a single frame to detect and visualize Charuco board.
+
+        Args:
+            frame: Input frame to process
+        """
+        # Undistort image if fisheye model is used
+        if self.fisheye:
+            calibrator = CameraCalibrator(self, fisheye=self.fisheye)
+            calibrator.camera_matrix = self.camera_matrix
+            calibrator.dist_coeffs = self.dist_coeffs
+            frame, new_camera_matrix = calibrator.undistort_image(frame, 0.0)
+            new_image_size = frame.shape[:2][::-1]
+            
+            # Reset camera parameters
+            self.reset_camera_params(new_image_size, new_camera_matrix)
+        
+        # Detect Charuco board
+        charuco_corners, charuco_ids, marker_corners, marker_ids = self.detect_board(frame)
+        
+        # Visualization
+        if self.args.draw_charuco_markers_cv2:
+            self.draw_detected_markers_cv2(frame, marker_corners, marker_ids)
+
+        if self.args.draw_charuco_corners_cv2:
+            self.draw_detected_corners_cv2(frame, charuco_corners, charuco_ids)
+
+        # Set temporary object points
+        self.set_temp_objpoints(charuco_ids)
+        # =======================================================
+
+        # Estimate pose if camera parameters are available
+        if self.args.use_estimate_pose_charuco_board:
+            objpoints_type = "all-corners"
+            success, rvec, tvec = self.estimate_pose_CharucoBoard(charuco_corners, charuco_ids)
+        else:
+            objpoints_type = "temp"
+            success, rvec, tvec = self.estimate_pose_solvePnP(charuco_corners, charuco_ids)
+
+        if success:
+            # Draw axes
+            if self.args.draw_board_pose_cv2:
+                self.draw_board_pose_cv2(frame, rvec, tvec, axis_length=0.2)
+
+            # Project 3D points to image plane
+            if self.args.project_points:
+                self.project_points(frame, rvec, tvec, objpoints_type=objpoints_type)
+        
+        # Draw detected corners
+        if self.args.draw_charuco_corners:
+            self.draw_detected_corners(frame, charuco_corners, charuco_ids)
+        
+        return frame
+
+    def transform_object_pose_between_cameras(
+        self,
+        rvec_obj_in_src_cam: np.ndarray,
+        tvec_obj_in_src_cam: np.ndarray,
+        src_cam_extrinsic: np.ndarray,
+        dst_cam_extrinsic: np.ndarray,
+        verbose: bool = False
+    ) -> tuple[np.ndarray, np.ndarray]:
+        """
+        Transform a 3D object's pose from the source camera's coordinate system 
+        to the target (destination) camera's coordinate system.
+
+        Parameters:
+        ----------
+        rvec_obj_in_src_cam : (3, 1) rotation vector of the object in source camera coordinates
+        tvec_obj_in_src_cam : (3, 1) translation vector of the object in source camera coordinates
+        src_cam_extrinsic : (4, 4) extrinsic matrix of the source camera in world coordinates
+        dst_cam_extrinsic : (4, 4) extrinsic matrix of the target camera in world coordinates
+        verbose : bool
+            If True, prints intermediate transformation matrices
+
+        Returns:
+        -------
+        rvec_obj_in_dst_cam : (3, 1) rotation vector of the object in destination camera coordinates
+        tvec_obj_in_dst_cam : (3, 1) translation vector of the object in destination camera coordinates
+        """
+
+        # Convert object rotation vector to rotation matrix
+        R_obj_in_src_cam = cv2.Rodrigues(rvec_obj_in_src_cam)[0]
+
+        # Construct the 4x4 pose matrix (homogeneous) of the object in source camera frame
+        T_obj_in_src_cam = np.eye(4)
+        T_obj_in_src_cam[:3, :3] = R_obj_in_src_cam
+        T_obj_in_src_cam[:3, 3] = tvec_obj_in_src_cam.flatten()
+
+        # Compute the transformation from source camera to destination camera
+        T_from_src_to_dst = np.linalg.inv(dst_cam_extrinsic) @ src_cam_extrinsic
+
+        # Apply the transformation to move the object's pose into destination camera coordinates
+        T_obj_in_dst_cam = T_from_src_to_dst @ T_obj_in_src_cam
+
+        # Extract rotation and translation from the transformed pose
+        R_obj_in_dst_cam = T_obj_in_dst_cam[:3, :3]
+        rvec_obj_in_dst_cam = cv2.Rodrigues(R_obj_in_dst_cam)[0]
+        tvec_obj_in_dst_cam = T_obj_in_dst_cam[:3, 3].reshape(3, 1)
+
+        if verbose:
+            print("T_src_to_dst:\n", T_from_src_to_dst)
+            print("T_obj_in_dst_cam:\n", T_obj_in_dst_cam)
+            print("rvec_obj_in_dst_cam:\n", rvec_obj_in_dst_cam)
+            print("tvec_obj_in_dst_cam:\n", tvec_obj_in_dst_cam)
+            
+        return rvec_obj_in_dst_cam, tvec_obj_in_dst_cam
+
+    def run_charuco_pipeline_extrinsics(self, frame: np.ndarray) -> np.ndarray:
+        """Process a single frame to detect and visualize Charuco board.
+
+        Args:
+            frame: Input frame to process
+        """
+        E_cam_0 = np.array([
+            1., 0., 0., 0.,
+            0., 1., 0., 0.,
+            0., 0., 1., 0.,
+            0., 0., 0., 1.
+        ]).reshape(4, 4)
+        
+        E_cam_4 = np.array([
+            0.96312761650608569, -0.058183508893373093, -0.26267827016363859, 624.30689259158066,
+            -0.1678050222570607, 0.63325269895843173, -0.75553457483239594, 772.39078599377149,
+            0.21030137619286779, 0.77175494721751969, 0.60013967758903364, 356.67495738282247,
+            0., 0., 0., 1.
+        ]).reshape(4, 4)
+
+        # Undistort image if fisheye model is used
+        if self.fisheye:
+            calibrator = CameraCalibrator(self, fisheye=self.fisheye)
+            calibrator.camera_matrix = self.camera_matrix
+            calibrator.dist_coeffs = self.dist_coeffs
+            frame, new_camera_matrix = calibrator.undistort_image(frame, 0.0)
+            new_image_size = frame.shape[:2][::-1]
+            
+            # Reset camera parameters
+            self.reset_camera_params(new_image_size, new_camera_matrix)
+        
+        # Detect Charuco board
+        charuco_corners, charuco_ids, marker_corners, marker_ids = self.detect_board(frame)
+        
+        # Visualization
+        if self.args.draw_charuco_markers_cv2:
+            self.draw_detected_markers_cv2(frame, marker_corners, marker_ids)
+
+        if self.args.draw_charuco_corners_cv2:
+            self.draw_detected_corners_cv2(frame, charuco_corners, charuco_ids)
+
+        # Set temporary object points
+        self.set_temp_objpoints(charuco_ids)
+        # =======================================================
+
+        # Estimate pose if camera parameters are available
+        if self.args.use_estimate_pose_charuco_board:
+            objpoints_type = "all-corners"
+            success, rvec, tvec = self.estimate_pose_CharucoBoard(charuco_corners, charuco_ids)
+        else:
+            objpoints_type = "temp"
+            success, rvec, tvec = self.estimate_pose_solvePnP(charuco_corners, charuco_ids)
+
+        # Estimate pose if camera parameters are available
+        if self.rvec_obj_in_dst_cam is None and self.tvec_obj_in_dst_cam is None:
+            if self.args.use_estimate_pose_charuco_board:
+                objpoints_type = "all-corners"
+                success, rvec, tvec = self.estimate_pose_CharucoBoard(charuco_corners, charuco_ids)
+            else:
+                objpoints_type = "temp"
+                success, rvec, tvec = self.estimate_pose_solvePnP(charuco_corners, charuco_ids)
+            
+            self.rvec_obj_in_dst_cam, self.tvec_obj_in_dst_cam = self.transform_object_pose_between_cameras(
+                rvec_obj_in_src_cam=rvec,
+                tvec_obj_in_src_cam=tvec,
+                src_cam_extrinsic=E_cam_4,
+                dst_cam_extrinsic=E_cam_0,
+                verbose=False,
+            )
+        else:
+            success = True
+            rvec = self.rvec_obj_in_dst_cam
+            tvec = self.tvec_obj_in_dst_cam
+            objpoints_type = "all-corners" if self.args.use_estimate_pose_charuco_board else "temp"
+
+        if success:
+            # Draw axes
+            if self.args.draw_board_pose_cv2:
+                self.draw_board_pose_cv2(frame, rvec, tvec, axis_length=300)
+
+            # Project 3D points to image plane
+            if self.args.project_points:
+                self.project_points(frame, rvec, tvec, objpoints_type=objpoints_type)
+        
+        # Draw detected corners
+        if self.args.draw_charuco_corners:
+            self.draw_detected_corners(frame, charuco_corners, charuco_ids)
+        
+        return frame

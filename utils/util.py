@@ -70,18 +70,18 @@ def load_camera_params(file_path: str) -> Tuple[np.ndarray, np.ndarray]:
 
 def save_frame(
     original: np.ndarray,
-    output_dir: str,
-    frame_id: int,
     annotated: Optional[np.ndarray] = None,
+    output_dir: str = None,
+    frame_id: int = None,
     compression: int = 3
 ) -> str:
     """Save original and optionally annotated frames to disk.
 
     Args:
         original: Original frame to save
+        annotated: Optional annotated frame to save
         output_dir: Directory to save frames to
         frame_id: Frame identifier (used in filename)
-        annotated: Optional annotated frame to save
         compression: PNG compression level (0-9)
 
     Returns:

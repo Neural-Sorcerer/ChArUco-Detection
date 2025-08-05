@@ -281,7 +281,7 @@ def pipeline(path, camera_matrix, dist_coeffs, freeze=0, verbose=False):
 
 
 def main():
-    folder = "boards_imgs"
+    folder = "temp/boards_imgs"
     yaml_file = Path(f"{folder}/calibrated_cameras_data.yml")
     image_files = sorted(glob.glob(os.path.join(folder, "*.png")))
 

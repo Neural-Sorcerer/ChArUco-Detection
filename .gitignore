@@ -1,10 +1,5 @@
 # Custom
-Cam_001/
-outputs*/
-calibration_images*/
-temp*/
-Q/
-boards_imgs/
+temp/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

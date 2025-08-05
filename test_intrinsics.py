@@ -39,7 +39,7 @@ def run_pipeline(args: argparse.Namespace,
         winname: Window name for display
     """
     paths = {
-        "cam_0": "temp_extr/images/Cam_001/000031.png",
+        "cam_0": "temp/temp_extr/images/Cam_001/000031.png",
     }
     
     for key, value in paths.items():
@@ -67,7 +67,7 @@ def run_pipeline(args: argparse.Namespace,
 def main() -> None:
     """Main function to run the Charuco detection pipeline."""
     # Default path for sample image
-    intrinsics = "calibration_images/calibration_images_0/calibration.xml"
+    intrinsics = "temp/calibration_images/calibration_images_0/calibration.xml"
 
     # Parse command-line arguments
     parser = argparse.ArgumentParser(description="Charuco board detection for camera calibration")

@@ -38,9 +38,9 @@ def run_pipeline(args: argparse.Namespace,
         winname: Window name for display
     """
     paths = {
-        "cam_4": "temp_extr/images/Cam_005/000031.png",
-        "cam_0": "temp_extr/images/Cam_001/000031.png",
-        # "cam_1": "temp_extr/images/Cam_002/000006.png",
+        "cam_4": "temp/temp_extr/images/Cam_005/000031.png",
+        "cam_0": "temp/temp_extr/images/Cam_001/000031.png",
+        # "cam_1": "temp/temp_extr/images/Cam_002/000006.png",
     }
     
     for key, value in paths.items():
@@ -104,8 +104,8 @@ def main() -> None:
     parser.add_argument('--save-all', action="store_true", default=False, help='Save all frames flag')
     args = parser.parse_args()
 
-    fisheye_intrinsics = "calibration_images/calibration_images_0/calibration.xml"
-    pinhole_intrinsics = "calibration_images/calibration_images_8/calibration.xml"
+    fisheye_intrinsics = "temp/calibration_images/calibration_images_0/calibration.xml"
+    pinhole_intrinsics = "temp/calibration_images/calibration_images_8/calibration.xml"
 
     # Create configurations
     board_config = CharucoBoardConfig(

@@ -228,7 +228,7 @@ def main():
     cv2.moveWindow(winname, x=FHD[0]//2-HD[0]//2, y=FHD[1]//4-HD[1]//4)
     
     # Load images
-    folder = "boards_imgs"
+    folder = "temp/boards_imgs"
     image_net_1 = f"{folder}/net_1_tv_2.png"
     image_net_2 = f"{folder}/net_2_tv_2.png"
     

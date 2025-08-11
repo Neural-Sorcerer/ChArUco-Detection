@@ -34,7 +34,7 @@ class DataQualityJudge:
     
     def __init__(self, 
                  image_size: Tuple[int, int],
-                 grid_size: Tuple[int, int] = (6, 4),
+                 grid_size: Tuple[int, int] = (12, 8),
                  min_distance_threshold: float = 0.15,
                  min_size_ratio: float = 0.05,
                  max_size_ratio: float = 0.8,
@@ -288,7 +288,7 @@ class DataQualityJudge:
         # Update position heatmap
         grid_x = min(int(sample.x_position * self.grid_size[0]), self.grid_size[0] - 1)
         grid_y = min(int(sample.y_position * self.grid_size[1]), self.grid_size[1] - 1)
-        self.position_heatmap[grid_y, grid_x] += 1
+        self.position_heatmap[grid_x, grid_y] += 1
         
         # Update coverage statistics
         self._update_coverage_stats()
@@ -358,8 +358,8 @@ class DataQualityJudge:
         ax.set_title(f'Calibration Board Position Coverage\n({len(self.accepted_samples)} samples)')
         
         # Add grid
-        ax.set_xticks(range(self.grid_size[1]))
-        ax.set_yticks(range(self.grid_size[0]))
+        ax.set_xticks(range(self.grid_size[0]))
+        ax.set_yticks(range(self.grid_size[1]))
         ax.grid(True, alpha=0.3)
         
         # Add sample count annotations
@@ -367,7 +367,7 @@ class DataQualityJudge:
             for j in range(self.grid_size[0]):  # cols (x-axis)
                 count = int(self.position_heatmap[j, i])
                 if count > 0:
-                    ax.text(j, i, str(count), ha='center', va='center',
+                    ax.text(i, j, str(count), ha='center', va='center',
                            color='white' if count > np.max(self.position_heatmap) / 2 else 'black')
         
         plt.tight_layout()

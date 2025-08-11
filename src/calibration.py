@@ -19,7 +19,7 @@ import numpy as np
 class CameraCalibrator:
     """Class for calibrating cameras using Charuco boards."""
 
-    def __init__(self, detector: object, fisheye: bool = False):
+    def __init__(self, detector: object = None, fisheye: bool = False):
         """Initialize the CameraCalibrator.
 
         Args:
@@ -404,6 +404,54 @@ class CameraCalibrator:
         except Exception as e:
             logging.error(f"❌ Error showing calibration metrics: {str(e)}")
             return False
+
+    def undistort_point(
+        self,
+        pt: Tuple[float, float],
+        new_camera_matrix: np.ndarray,
+        R: Optional[np.ndarray] = None
+    ) -> Optional[Tuple[int, int]]:
+        """Undistort a single image point to rectified pixel coordinates.
+
+        args:
+            pt: Distorted pixel in the original fisheye image as (x, y).
+            new_camera_matrix: The projection matrix P used for image undistortion.
+            R: Optional 3x3 rectification rotation. Defaults to identity.
+
+        Returns:
+            Rectified pixel location (u, v) in the undistorted image, or None on failure.
+        """
+        try:
+            if (self.camera_matrix is None) or (self.dist_coeffs is None):
+                logging.error("❌ No calibration data available")
+                return None
+
+            if R is None:
+                R = np.eye(3, dtype=np.float64)
+
+            # Shape must be (N, 1, 2), dtype float64
+            distorted_pts = np.array([[[pt[0], pt[1]]]], dtype=np.float64)
+
+            # Map to rectified pixels using the same R and P as used for image undistortion
+            rectified_pts = cv2.fisheye.undistortPoints(
+                distorted=distorted_pts,
+                K=self.camera_matrix,
+                D=self.dist_coeffs,
+                R=R,
+                P=new_camera_matrix
+            )
+
+            rect_point = (
+                int(round(rectified_pts[0, 0, 0])),
+                int(round(rectified_pts[0, 0, 1]))
+            )
+
+            logging.debug(f"🔎 Undistorted point {pt} → {rect_point}")
+            return rect_point
+
+        except Exception as e:
+            logging.error(f"❌ Error undistorting point: {str(e)}")
+            return None
 
     def undistort_image(self, image: np.ndarray, balance: float = 1.0, simple: bool = False) -> np.ndarray:
         """Undistort an image using calibration parameters.

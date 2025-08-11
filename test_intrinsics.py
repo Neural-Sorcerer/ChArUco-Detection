@@ -12,13 +12,14 @@ from typing import *
 import cv2
 
 # === Local Modules ===
+from src.calibration import CameraCalibrator
 from src.charuco_detector import CharucoDetector
 from configs.config import Resolution, CharucoBoardConfig, DetectorConfig, CharucoDetectorConfig
 
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format='%(asctime)s - %(name)s:%(lineno)02d - %(levelname)s - %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'
 )
@@ -38,6 +39,10 @@ def run_pipeline(args: argparse.Namespace,
         resolution: Resolution for video capture
         winname: Window name for display
     """
+    # Create a window
+    cv2.namedWindow(winname, cv2.WINDOW_NORMAL)
+    cv2.resizeWindow(winname, width=Resolution.HD[0], height=Resolution.HD[1])
+    
     paths = {
         "cam_0": "temp/temp_extr/images/Cam_001/000031.png",
     }
@@ -50,17 +55,30 @@ def run_pipeline(args: argparse.Namespace,
             logging.error(f"❌ Cannot open image {args.index}")
             return
 
-        # Create a window
-        cv2.namedWindow(winname, cv2.WINDOW_NORMAL)
-        cv2.resizeWindow(winname, width=Resolution.HD[0], height=Resolution.HD[1])
-
+        # Save original frame
+        original = frame.copy()
+        
+        pt = (2390, 1043)
+        # pt = (293, 198)
+        original = cv2.circle(original, pt, 10, (0, 0, 255), -1)
+        
+        calibrator = CameraCalibrator()
+        calibrator.camera_matrix = detector.camera_matrix
+        calibrator.dist_coeffs = detector.dist_coeffs
+        
         # Process single image
         frame = detector.run_charuco_pipeline(frame)
+        
+        # detector.camera_matrix = new_camera_matrix
+        rect_point = calibrator.undistort_point(pt, detector.camera_matrix)
+        frame = cv2.circle(frame, rect_point, 10, (0, 255, 0), -1)
+        
+        frame = cv2.hconcat([original, frame])
 
         # Show the frame
         cv2.imshow(winname, frame)
         cv2.waitKey(freeze)
-        
+    
     cv2.destroyAllWindows()
 
 

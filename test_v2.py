@@ -380,12 +380,12 @@ def main():
             )
             
             # TV1: widht=76 height=81    90  Fail
-            width_shift = SQUARE_SIZE_TV_SMALL - 76
-            height_shift = SQUARE_SIZE_TV_SMALL - 81
+            width_shift = SQUARE_SIZE_TV_SMALL - 76  # 
+            height_shift = SQUARE_SIZE_TV_SMALL - 81 # 9*2
             shift_mm = (height_shift, width_shift)
             objp_tv_small_1 = objp_tv_small.copy()
             objp_tv_small_1 = shift_checkerboard(objp_tv_small_1, rows=CHECKERBOARD_TV[1], cols=CHECKERBOARD_TV[0], shift_mm=shift_mm)
-            
+
             # Calculate pose
             pipeline(
                 path,
@@ -447,6 +447,17 @@ def main():
                 verbose=True,
             )
 
+            print("Object # 1")
+            print("width =", max(objp_tv_small_1[:, 0]) - min(objp_tv_small_1[:, 0]))
+            print("height =", max(objp_tv_small_1[:, 1]) - min(objp_tv_small_1[:, 0]))
+            
+            print("Object # 2")
+            print("width =", max(objp_tv_big_2[:, 0]) - min(objp_tv_big_2[:, 0]))
+            print("height =", max(objp_tv_big_2[:, 1]) - min(objp_tv_big_2[:, 0]))
+            
+            print("Object # 3")
+            print("width =", max(objp_tv_small_3[:, 0]) - min(objp_tv_small_3[:, 0]))
+            print("height =", max(objp_tv_small_3[:, 1]) - min(objp_tv_small_3[:, 0]))
         # if "net_1" in name:
         #     pose_path = f"{folder}/net_2_tv_3.npz"
             

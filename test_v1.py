@@ -282,7 +282,7 @@ def pipeline(path, camera_matrix, dist_coeffs, freeze=0, verbose=False):
 
 def main():
     folder = "temp/boards_imgs"
-    yaml_file = Path(f"{folder}/calibrated_cameras_data.yml")
+    yaml_file = Path(f"{folder}/calibrated_cameras_data_v2.yml")
     image_files = sorted(glob.glob(os.path.join(folder, "*.png")))
 
     cam_params = load_camera_calibration(yaml_file)
@@ -305,9 +305,9 @@ def main():
         # Calculate pose
         rvec, tvec = pipeline(path, camera_matrix, dist_coeffs, freeze=0, verbose=True)
 
-        # Save pose
-        if not os.path.exists(pose_path):
-            np.savez(pose_path, rvec=rvec, tvec=tvec)
+        # # Save pose
+        # if not os.path.exists(pose_path):
+        #     np.savez(pose_path, rvec=rvec, tvec=tvec)
 
 
 if __name__ == "__main__":

@@ -6,8 +6,8 @@ from utils.transform import *
 
 
 # Load camera and TV poses
-tv_poses = load_tv_poses("camera_tv_params/TV_board_poses_optimized.txt", verbose=False)
-cam_poses = cv2.FileStorage("camera_tv_params/calibrated_cameras_data_5.yml", cv2.FILE_STORAGE_READ)
+tv_poses = load_tv_poses("camera_tv_params/TV_board_poses_optimized_v2.txt", verbose=False)
+cam_poses = cv2.FileStorage("camera_tv_params/calibrated_cameras_data_v2.yml", cv2.FILE_STORAGE_READ)
 
 
 def display_cameras_tvs_in_3D():
@@ -35,10 +35,10 @@ def display_cameras_tvs_in_3D():
             cam_color = (0.95, 0.5, 0.07) # orange
             cam_label = f"{cam_idx}: Fisheye OMS"
 
-        # Anker Pinhole
+        # RealSense Pinhole
         elif cam_idx in [4, 5]:
             cam_color = (0.3, 0.8, 1.0) # light blue
-            cam_label = f"{cam_idx}: Pinhole Anker"
+            cam_label = f"{cam_idx}: Pinhole RealSense"
         
         # CCTV Pinhole
         elif cam_idx in [6, 7]:
@@ -46,7 +46,11 @@ def display_cameras_tvs_in_3D():
             cam_label = f"{cam_idx}: Pinhole CCTV"
         
         # TFT – Helios (Depth)
-        elif cam_idx in [8, 9]:
+        elif cam_idx in [8]:
+            cam_color = (1.0, 1.0, 0.0) # green
+            cam_label = f"{cam_idx}: Pinhole Anker"
+        
+        elif cam_idx in [9]:
             cam_color = (0.0, 1.0, 0.0) # green
             cam_label = f"{cam_idx}: TFT - Helios (Depth)"
         
@@ -69,7 +73,7 @@ def display_cameras_tvs_in_3D():
         board_rvec = cv2.Rodrigues(tv_R)[0]
         board_tvec = tv_tvec
         cam_R_6 = cam_poses.getNode("camera_6").getNode("camera_pose_matrix").mat()
-        cam_R_0 = cam_poses.getNode("camera_2").getNode("camera_pose_matrix").mat()
+        cam_R_0 = cam_poses.getNode("camera_0").getNode("camera_pose_matrix").mat()
         
         rvec_obj_in_dst_cam, tvec_obj_in_dst_cam = transform_object_pose_between_cameras(
             rvec_obj_in_src_cam=board_rvec,

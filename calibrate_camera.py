@@ -86,7 +86,7 @@ def collect_calibration_images(args: argparse.Namespace,
 
         # Visualization
         if marker_corners:
-            detector.draw_detected_markers(display_frame, marker_corners, marker_ids)
+            detector.draw_detected_markers_cv2(display_frame, marker_corners, marker_ids)
 
         if (charuco_corners is not None) and (len(charuco_corners) > 0):
             detector.draw_detected_corners(display_frame, charuco_corners, charuco_ids)
@@ -119,11 +119,11 @@ def collect_calibration_images(args: argparse.Namespace,
         if (time() - save_time) < 1:
             cv2.putText(
                 display_frame,
-                f"✅ Image Saved",
+                f"Image Saved",
                 (10, 70),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 1.0,
-                (0, 255, 255),
+                (255, 255, 0),
                 2,
                 cv2.LINE_AA
             )
@@ -456,9 +456,9 @@ def main() -> None:
 
     # Collect mode
     collect_parser = subparsers.add_parser('collect', help='Collect calibration images')
-    collect_parser.add_argument('--index', type=str, default="2", help='Camera index or video file path')
+    collect_parser.add_argument('--index', type=str, default="0", help='Camera index or video file path')
     collect_parser.add_argument('--output-dir', type=str, default='calibration_images', help='Output directory for calibration images')
-    collect_parser.add_argument('--resolution', type=str, default='FHD', choices=['SS', 'SD', 'HD', 'FHD', 'UHD', 'OMS'], help='Camera resolution')
+    collect_parser.add_argument('--resolution', type=str, default='HD', choices=['SS', 'SD', 'HD', 'FHD', 'UHD', 'OMS'], help='Camera resolution')
     collect_parser.add_argument('--use-quality-judge', action='store_true', help='Use data quality assessment during collection')
     collect_parser.add_argument('--target-samples', type=int, default=50, help='Target number of diverse samples')
     collect_parser.add_argument('--auto-save', action='store_true', help='Automatically save good quality samples')
@@ -493,7 +493,7 @@ def main() -> None:
     charuco_detector_config = CharucoDetectorConfig()
 
     # Create detector
-    detector = CharucoDetector(board_config, detector_config, charuco_detector_config)
+    detector = CharucoDetector(args, board_config, detector_config, charuco_detector_config)
 
     # Handle different modes
     if args.mode == 'collect':
@@ -526,28 +526,27 @@ def main() -> None:
 if __name__ == '__main__':
     main()
 
-""" 
+"""
 python calibrate_camera.py calibrate \
     --input-dir=calibration_images/calibration_images_8 \
     --output-file=calibration_images_8/calibration.xml \
     --undistort \
     --balance=0.0
-    
+
 python calibrate_camera.py calibrate \
     --input-dir=calibration_images/calibration_images_0 \
     --output-file=calibration.xml \
     --fisheye \
     --undistort \
     --balance=0.0
-    
-    
+
 python calibrate_camera.py collect \
-    --index=8 \
+    --index=0 \
     --output-dir=calibration_images/calibration_images_test \
     --target-samples=50 \
     --auto-save \
     --use-quality-judge
-        
+    
         
     collect_parser.add_argument('--use-quality-judge', action='store_true', help='Use data quality assessment during collection')
     collect_parser.add_argument('--target-samples', type=int, default=50, help='Target number of diverse samples')

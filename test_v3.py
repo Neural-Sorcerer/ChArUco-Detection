@@ -233,7 +233,7 @@ def main():
     image_net_2 = f"{folder}/net_2_tv_2.png"
     
     # Load camera calibration
-    yaml_file = f"{folder}/calibrated_cameras_data_v2.yml"
+    yaml_file = f"{folder}/calibrated_cameras_data_v3.yml"
 
     # Get camera parameters
     cam_params = load_camera_calibration(yaml_file)

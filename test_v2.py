@@ -296,7 +296,7 @@ def pipeline(path, objp_tvs, dst_camera_matrix, dst_dist_coeffs, rvec_obj_in_dst
 
 def main():
     folder = "temp/boards_imgs"
-    yaml_file = Path(f"{folder}/calibrated_cameras_data_v2.yml")
+    yaml_file = Path(f"{folder}/calibrated_cameras_data_v3.yml")
     image_files = sorted(glob.glob(os.path.join(folder, "*.png")))
 
     cam_params = load_camera_calibration(yaml_file)

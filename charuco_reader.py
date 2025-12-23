@@ -126,13 +126,15 @@ def main() -> None:
     """Main function to run the Charuco detection pipeline."""
     # Default path for sample image
     # path = "assets/charuco_boards/charuco_board_7x7.png"
-    path = "calibration_images/calibration_images_0/calib_0039.png"
-    intrinsics = "calibration_images/calibration_images_0/calibration.xml"
-
+    # path = "calibration_images/calibration_images_0/calib_0039.png"
+    # intrinsics = "calibration_images/calibration_images_0/calibration.xml"
+    # path =  "data/ti_camera_input/"
+    # intrinsics = None
+    
     # Parse command-line arguments
     parser = argparse.ArgumentParser(description="Charuco board detection for camera calibration")
-    parser.add_argument('--index', default=path, type=str, help='Camera index, video file path, or image path')
-    parser.add_argument('--camera-params', default=intrinsics, type=str, help='Path to camera calibration file')
+    parser.add_argument('--index', default="0", type=str, help='Camera index, video file path, or image path')
+    parser.add_argument('--camera-params', default=None, type=str, help='Path to camera calibration file')
     parser.add_argument('--resolution', type=str, default='FHD', choices=['SS', 'SD', 'HD', 'FHD', 'UHD', 'OMS'], help='Camera resolution')
     
     # Visualization arguments

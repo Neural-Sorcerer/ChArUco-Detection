@@ -7,6 +7,7 @@ and saving/loading calibration parameters.
 # === Standard Libraries ===
 import os
 import glob
+import json
 import logging
 from typing import *
 import xml.etree.ElementTree as ET
@@ -28,9 +29,13 @@ class CameraCalibrator:
         """
         self.detector = detector
         self.fisheye = fisheye
-        self.all_corners = []   # All detected corners
-        self.all_ids = []       # All detected IDs
-        self.image_size = None  # Image size (width, height)
+        self.all_ids = []           # All detected IDs
+        self.all_corners = []       # All detected corners
+        self.all_image_names = []   # All image names
+        self.image_size = None      # Image size (width, height)
+
+        # Calibration data samples for JSON
+        self.calibration_samples = []
 
         # Calibration results
         self.camera_matrix = None
@@ -42,11 +47,12 @@ class CameraCalibrator:
         self.per_view_errors = None
         self.reprojection_error = None
 
-    def add_calibration_image(self, image: np.ndarray) -> bool:
+    def add_calibration_image(self, image: np.ndarray, image_name: str = None) -> bool:
         """Add an image for calibration.
 
         Args:
             image: Input image
+            image_name: Name of the image file (optional)
 
         Returns:
             True if corners were detected, False otherwise
@@ -69,6 +75,12 @@ class CameraCalibrator:
         # Add corners and IDs to lists
         self.all_corners.append(charuco_corners)
         self.all_ids.append(charuco_ids)
+        
+        # Add image name
+        if image_name is None:
+            image_name = f"image_{len(self.all_corners)-1}"
+        self.all_image_names.append(image_name)
+        
         return True
 
     def add_calibration_images_from_directory(self, directory: str, pattern: str = "*.png") -> int:
@@ -84,7 +96,7 @@ class CameraCalibrator:
         logging.info(f"⭐ ───────────── Adding Images for Calibration ───────────── ⭐")
         
         # Get all image files in directory
-        image_files = glob.glob(os.path.join(directory, pattern))
+        image_files = sorted(glob.glob(os.path.join(directory, "**", pattern), recursive=True))
 
         if not image_files:
             logging.warning(f"⚠️ No images found in {directory} matching pattern {pattern}")
@@ -100,7 +112,7 @@ class CameraCalibrator:
                 logging.warning(f"⚠️ Could not read image {image_file}")
                 continue
 
-            if self.add_calibration_image(image):
+            if self.add_calibration_image(image, image_name=os.path.basename(image_file)):
                 count += 1
 
         logging.info(f"✅ Added {count} images for calibration")
@@ -126,13 +138,21 @@ class CameraCalibrator:
         # Prepare object points for fisheye calibration
         objpoints = []
         imgpoints = []
-        for corners, ids in zip(self.all_corners, self.all_ids):
+        self.calibration_samples = [] # Reset samples
+
+        for corners, ids, image_name in zip(self.all_corners, self.all_ids, self.all_image_names):
             if (corners is not None) and (ids is not None) and (len(corners) > 3):
                 # Get object points for detected corners
                 obj_pts, img_pts = board.matchImagePoints(corners, ids)
                 if (obj_pts is not None) and (img_pts is not None):
                     objpoints.append(obj_pts.reshape(-1, 1, 3))
                     imgpoints.append(img_pts.reshape(-1, 1, 2))
+                    
+                    # Store sample for JSON
+                    self.calibration_samples.append({
+                        "image": image_name,
+                        "keypoints": np.hstack((img_pts.reshape(-1, 2), ids.reshape(-1, 1))).tolist()
+                    })
 
         if len(objpoints) < 3:
             logging.error(f"❌ Not enough valid images for calibration")
@@ -298,6 +318,48 @@ class CameraCalibrator:
 
         except Exception as e:
             logging.error(f"❌ Error saving calibration parameters: {str(e)}")
+            return False
+
+    def save_calibration_json(self, file_path: str) -> bool:
+        """Save calibration data samples to a JSON file.
+
+        Args:
+            file_path: Path to save the JSON file
+
+        Returns:
+            True if saved successfully, False otherwise
+        """
+        try:
+            data = {
+                "camera_params": {
+                    "camera_name": "cam_0", # Default
+                    "model": "fisheye" if self.fisheye else "pinhole",
+                    "resolution": {
+                        "width": self.image_size[0],
+                        "height": self.image_size[1]
+                    }
+                },
+                "board_params": {
+                    "rows": int(self.detector.board_config.y_squares),
+                    "cols": int(self.detector.board_config.x_squares),
+                    "square_size": float(self.detector.board_config.square_length)
+                },
+                "samples": self.calibration_samples
+            }
+
+            # Create directory if it doesn't exist
+            dir_path = os.path.dirname(file_path)
+            if dir_path:
+                os.makedirs(dir_path, exist_ok=True)
+
+            with open(file_path, 'w') as f:
+                json.dump(data, f, indent=4)
+            
+            logging.info(f"✅ Calibration data saved to {file_path}")
+            return True
+
+        except Exception as e:
+            logging.error(f"❌ Error saving calibration JSON: {str(e)}")
             return False
 
     def load_calibration_parameters(file_path: str

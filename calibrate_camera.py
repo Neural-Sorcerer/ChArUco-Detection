@@ -213,7 +213,7 @@ def collect_with_quality_assessment(
 
         # Visualization
         if marker_corners:
-            detector.draw_detected_markers(display_frame, marker_corners, marker_ids)
+            detector.draw_detected_markers_cv2(display_frame, marker_corners, marker_ids)
 
         sample_quality = None
         if (charuco_corners is not None) and (len(charuco_corners) > 0):
@@ -288,8 +288,8 @@ def filter_existing_dataset(args: argparse.Namespace) -> None:
     from time import time
 
     # Find all images in input directory
-    image_files = glob.glob(os.path.join(args.input_dir, "*.png"))
-    image_files.extend(glob.glob(os.path.join(args.input_dir, "*.jpg")))
+    image_files = sorted(glob.glob(os.path.join(args.input_dir, "**", "*.png"), recursive=True))
+    image_files.extend(glob.glob(os.path.join(args.input_dir, "**", "*.jpg")))
 
     if not image_files:
         logging.error(f"❌ No images found in {args.input_dir}")
@@ -387,6 +387,11 @@ def calibrate_from_images(args: argparse.Namespace, detector: CharucoDetector) -
     if not calibrator.save_calibration_parameters(args.output_file):
         logging.error("❌ Failed to save calibration parameters")
 
+    # Save calibration debug data to JSON
+    json_output_file = os.path.splitext(args.output_file)[0] + "_corners.json"
+    if not calibrator.save_calibration_json(json_output_file):
+        logging.error("❌ Failed to save calibration JSON data")
+
     # Show calibration metrics
     metrics = calibrator.get_calibration_metrics()
     calibrator.show_calibration_metrics(metrics)
@@ -408,7 +413,7 @@ def test_calibration(args: argparse.Namespace, calibrator: CameraCalibrator) -> 
     os.makedirs(undistort_dir, exist_ok=True)
 
     # Get all images
-    image_files = glob.glob(os.path.join(args.input_dir, args.pattern))
+    image_files = sorted(glob.glob(os.path.join(args.input_dir, "**", args.pattern), recursive=True))
 
     if not image_files:
         logging.warning(f"⚠️ No images found in {args.input_dir} matching pattern {args.pattern}")
@@ -441,8 +446,8 @@ def main() -> None:
     # Common arguments
     parser.add_argument('--board-id', type=int, default=0, help='Charuco board ID')
     parser.add_argument('--x-squares', type=int, default=7, help='Number of squares in X direction')
-    parser.add_argument('--y-squares', type=int, default=5, help='Number of squares in Y direction')
-    parser.add_argument('--square-length', type=float, default=0.12, help='Square length in meters')
+    parser.add_argument('--y-squares', type=int, default=7, help='Number of squares in Y direction')
+    parser.add_argument('--square-length', type=float, default=0.10, help='Square length in meters')
     parser.add_argument('--marker-length', type=float, default=None, help='Marker length in meters (default: 75% of square length)')
 
     # Subparsers for different modes
@@ -458,7 +463,7 @@ def main() -> None:
     collect_parser = subparsers.add_parser('collect', help='Collect calibration images')
     collect_parser.add_argument('--index', type=str, default="0", help='Camera index or video file path')
     collect_parser.add_argument('--output-dir', type=str, default='calibration_images', help='Output directory for calibration images')
-    collect_parser.add_argument('--resolution', type=str, default='HD', choices=['SS', 'SD', 'HD', 'FHD', 'UHD', 'OMS'], help='Camera resolution')
+    collect_parser.add_argument('--resolution', type=str, default='OMS', choices=['SS', 'SD', 'HD', 'FHD', 'UHD', 'OMS'], help='Camera resolution')
     collect_parser.add_argument('--use-quality-judge', action='store_true', help='Use data quality assessment during collection')
     collect_parser.add_argument('--target-samples', type=int, default=50, help='Target number of diverse samples')
     collect_parser.add_argument('--auto-save', action='store_true', help='Automatically save good quality samples')
@@ -528,6 +533,10 @@ if __name__ == '__main__':
 
 """
 python calibrate_camera.py calibrate \
+    --input-dir=calibration_images/calibration_images_0 \
+    --fisheye
+    
+python calibrate_camera.py calibrate \
     --input-dir=calibration_images/calibration_images_8 \
     --output-file=calibration_images_8/calibration.xml \
     --undistort \
@@ -551,4 +560,11 @@ python calibrate_camera.py collect \
     collect_parser.add_argument('--use-quality-judge', action='store_true', help='Use data quality assessment during collection')
     collect_parser.add_argument('--target-samples', type=int, default=50, help='Target number of diverse samples')
 
+
+python calibrate_camera.py calibrate \
+    --input-dir=data/ti_camera_input \
+    --output-file=calibration.xml \
+    --fisheye \
+    --undistort \
+    --balance=0.0
 """

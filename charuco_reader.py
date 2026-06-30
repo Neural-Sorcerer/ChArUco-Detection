@@ -90,6 +90,28 @@ def run_pipeline(args: argparse.Namespace,
             logging.info("⚠️ Press 's' to save an image or 'q' to quit the process!")
 
         frame_id = 0
+
+
+        # import glob
+
+        # class ImageSequence:
+        #     def __init__(self, folder):
+        #         self.images = sorted(glob.glob(os.path.join(folder, "*.[jp][pn]g")))
+        #         self.index = 0
+        #     def isOpened(self):
+        #         return self.index < len(self.images)
+        #     def read(self):
+        #         if self.index < len(self.images):
+        #             img = cv2.imread(self.images[self.index])
+        #             self.index += 1
+        #             return img is not None, img
+        #         return False, None
+        #     def release(self):
+        #         pass
+
+        # cap = ImageSequence("Cam_001")
+
+        # Process video/camera feed
         while cap.isOpened():
             success, original = cap.read()
 
@@ -130,10 +152,12 @@ def main() -> None:
     # intrinsics = "calibration_images/calibration_images_0/calibration.xml"
     # path =  "data/ti_camera_input/"
     # intrinsics = None
+    rtsp_link_left = "rtsp://admin:Deltax968@169.254.0.2:554/8860"
+    rtsp_link_right = "rtsp://admin:Deltax968@169.254.0.3:554/8860"
     
     # Parse command-line arguments
     parser = argparse.ArgumentParser(description="Charuco board detection for camera calibration")
-    parser.add_argument('--index', default="0", type=str, help='Camera index, video file path, or image path')
+    parser.add_argument('--index', default=rtsp_link_left, type=str, help='Camera index, video file path, or image path')
     parser.add_argument('--camera-params', default=None, type=str, help='Path to camera calibration file')
     parser.add_argument('--resolution', type=str, default='FHD', choices=['SS', 'SD', 'HD', 'FHD', 'UHD', 'OMS'], help='Camera resolution')
     
@@ -155,7 +179,7 @@ def main() -> None:
     parser.add_argument('--board-id', type=int, default=0, help='Charuco board ID')
     parser.add_argument('--x-squares', type=int, default=7, help='Number of squares in X direction')
     parser.add_argument('--y-squares', type=int, default=7, help='Number of squares in Y direction')
-    parser.add_argument('--square-length', type=float, default=0.10, help='Square length in meters')
+    parser.add_argument('--square-length', type=float, default=0.053, help='Square length in meters')
     parser.add_argument('--marker-length', type=float, default=None, help='Marker length in meters (default: 75% of square length)')
 
     # Output arguments

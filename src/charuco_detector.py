@@ -232,37 +232,108 @@ class CharucoDetector:
         if (charuco_corners is not None) and (len(charuco_corners) > 0):
             cv2.aruco.drawDetectedCornersCharuco(frame, charuco_corners, charuco_ids, cornerColor=color)
 
+    @staticmethod
+    def _put_edged_text(frame: np.ndarray,
+                        text: str,
+                        org: Tuple[int, int],
+                        font_scale: float,
+                        color: Tuple[int, int, int],
+                        thickness: int,
+                        edge_color: Tuple[int, int, int] = (0, 0, 0)) -> None:
+        """Draw text with a black outline so ids stay readable over any background.
+
+        Args:
+            frame: Input frame to draw on
+            text: Text to render
+            org: Bottom-left corner of the text
+            font_scale: Font scale
+            color: Fill color of the glyphs (BGR)
+            thickness: Fill thickness
+            edge_color: Outline color (BGR)
+        """
+        cv2.putText(frame, text, org, cv2.FONT_HERSHEY_SIMPLEX, font_scale,
+                    edge_color, thickness + 2, cv2.LINE_AA)
+        cv2.putText(frame, text, org, cv2.FONT_HERSHEY_SIMPLEX, font_scale,
+                    color, thickness, cv2.LINE_AA)
+
     def draw_detected_corners(self,
                               frame: np.ndarray,
                               charuco_corners: np.ndarray,
                               charuco_ids: np.ndarray,
                               font_scale: float = 0.7,
-                              font_color: Tuple[int, int, int] = (255, 255, 0),
+                              font_color: Tuple[int, int, int] = (0, 0, 255),
                               thickness: int = 2,
                               point_color: Tuple[int, int, int] = (0, 255, 0),
-                              point_radius: int = 5) -> None:
-        """Draw inner-corner IDs on the frame.
+                              point_radius: int = 5,
+                              edge_color: Tuple[int, int, int] = (0, 0, 0),
+                              edge_thickness: int = 2) -> None:
+        """Draw inner Charuco corners as filled dots with a black edge and their id.
+
+        Matches the look of ``visualize_corners.py``: a bright filled dot ringed in
+        black (so it reads clearly over any background) with the corner id beside it.
 
         Args:
             frame: Input frame to draw on
             charuco_corners: Detected Charuco corners
             charuco_ids: IDs of detected Charuco corners
-            font_scale: Font scale for text
-            color: Color to draw text (BGR)
-            thickness: Thickness of text
+            font_scale: Font scale for the id text
+            font_color: Id text color (BGR)
+            thickness: Id text thickness
+            point_color: Fill color of the corner dot (BGR)
+            point_radius: Corner dot radius in pixels
+            edge_color: Color of the dot's outline ring (BGR)
+            edge_thickness: Thickness of the outline ring
         """
         if (charuco_corners is not None) and (charuco_ids is not None):
             for corner, corner_id in zip(charuco_corners, charuco_ids.flatten()):
                 org = (int(corner[0][0]), int(corner[0][1]))
-                cv2.putText(frame,
-                            str(corner_id),
-                            org,
-                            cv2.FONT_HERSHEY_SIMPLEX,
-                            font_scale,
-                            font_color,
-                            thickness,
-                            cv2.LINE_AA)
-                cv2.circle(frame, org, point_radius, point_color, -1)
+                cv2.circle(frame, org, point_radius, point_color, -1)           # filled dot
+                cv2.circle(frame, org, point_radius, edge_color, edge_thickness)  # black edge
+                self._put_edged_text(frame,
+                                     str(corner_id),
+                                     (org[0] + point_radius + 2, org[1] - point_radius - 2),
+                                     font_scale,
+                                     font_color,
+                                     thickness)
+
+    def draw_detected_markers_pretty(self,
+                                     frame: np.ndarray,
+                                     marker_corners: List[np.ndarray],
+                                     marker_ids: np.ndarray,
+                                     color: Tuple[int, int, int] = (0, 165, 255),
+                                     edge_color: Tuple[int, int, int] = (0, 0, 0),
+                                     thickness: int = 2) -> None:
+        """Draw detected ArUco markers as amber quads with black-edged corner dots.
+
+        Deliberately a different color from the green inner-corner dots so markers
+        (amber squares) and inner corners (green dots) are easy to tell apart.
+
+        Args:
+            frame: Input frame to draw on
+            marker_corners: Detected marker corners (list of (1, 4, 2) arrays)
+            marker_ids: IDs of detected markers
+            color: Quad / dot / id color (BGR)
+            edge_color: Color of each corner dot's outline ring (BGR)
+            thickness: Quad outline thickness
+        """
+        if not marker_corners:
+            return
+
+        ids = marker_ids.flatten() if marker_ids is not None else [None] * len(marker_corners)
+        for quad, marker_id in zip(marker_corners, ids):
+            pts = quad.reshape(-1, 2).astype(np.int32)
+            cv2.polylines(frame, [pts], True, color, thickness, cv2.LINE_AA)
+            for p in pts:
+                cv2.circle(frame, (int(p[0]), int(p[1])), 4, color, -1)
+                cv2.circle(frame, (int(p[0]), int(p[1])), 4, edge_color, 1)
+            if marker_id is not None:
+                center = pts.mean(axis=0).astype(int)
+                self._put_edged_text(frame,
+                                     str(marker_id),
+                                     (center[0] - 6, center[1] + 6),
+                                     0.6,
+                                     color,
+                                     2)
 
     def estimate_pose_CharucoBoard(self,
                                    charuco_corners: np.ndarray,
@@ -356,20 +427,46 @@ class CharucoDetector:
             logging.error(f"❌ Error estimating pose: {str(e)}")
             return False, None, None
     
-    def draw_board_pose_cv2(self,
-                  frame: np.ndarray,
-                  rvec: np.ndarray,
-                  tvec: np.ndarray,
-                  axis_length: float = 0.1) -> None:
-        """Draw 3D axes on the frame.
+    def draw_board_pose(self,
+                        frame: np.ndarray,
+                        rvec: np.ndarray,
+                        tvec: np.ndarray,
+                        axis_length: float = 0.1,
+                        thickness: int = 4,
+                        edge_thickness: int = 3) -> None:
+        """Draw the board-pose axes as black-edged colored lines with a white origin.
+
+        Like ``cv2.drawFrameAxes`` but every axis is outlined in black and the origin
+        is marked with a big white dot (black ring), so the pose reads clearly over
+        any background.
 
         Args:
             frame: Input frame to draw on
             rvec: Rotation vector
             tvec: Translation vector
-            axis_length: Length of axes to draw
+            axis_length: Length of the axes, in the same units as ``tvec``
+            thickness: Colored axis-line thickness
+            edge_thickness: Black outline width added on each side of a line
         """
-        cv2.drawFrameAxes(frame, self.camera_matrix, self.dist_coeffs, rvec, tvec, axis_length)
+        axis = np.float32([[0, 0, 0],
+                           [axis_length, 0, 0],
+                           [0, axis_length, 0],
+                           [0, 0, axis_length]]).reshape(-1, 3)
+        pts, _ = cv2.projectPoints(axis, rvec, tvec, self.camera_matrix, self.dist_coeffs)
+        pts = pts.reshape(-1, 2).astype(int)
+        origin = tuple(pts[0])
+        colors = [(0, 0, 255), (0, 255, 0), (255, 0, 0)]  # X=red, Y=green, Z=blue (BGR)
+
+        # Black outlines first, then the colored axes on top, so the colors stay
+        # unbroken where the three axes meet at the origin.
+        for tip in pts[1:]:
+            cv2.line(frame, origin, tuple(tip), (0, 0, 0), thickness + 2 * edge_thickness, cv2.LINE_AA)
+        for tip, color in zip(pts[1:], colors):
+            cv2.line(frame, origin, tuple(tip), color, thickness, cv2.LINE_AA)
+
+        # Big white origin dot with a black edge (the pose "starting point")
+        cv2.circle(frame, origin, 9, (255, 255, 255), -1, cv2.LINE_AA)
+        cv2.circle(frame, origin, 9, (0, 0, 0), 2, cv2.LINE_AA)
 
     def project_points(self,
                        frame: np.ndarray,
@@ -518,14 +615,15 @@ class CharucoDetector:
         if success:
             # Draw axes
             if self.args.draw_board_pose_cv2:
-                self.draw_board_pose_cv2(frame, rvec, tvec, axis_length=0.2)
+                self.draw_board_pose(frame, rvec, tvec, axis_length=0.2)
 
             # Project 3D points to image plane
             if self.args.project_points:
                 self.project_points(frame, rvec, tvec, objpoints_type=objpoints_type)
         
-        # Draw detected corners
+        # Pretty overlay: amber markers + green black-edged corner dots (+ ids)
         if self.args.draw_charuco_corners:
+            self.draw_detected_markers_pretty(frame, marker_corners, marker_ids)
             self.draw_detected_corners(frame, charuco_corners, charuco_ids)
         
         return frame
@@ -662,14 +760,15 @@ class CharucoDetector:
         if success:
             # Draw axes
             if self.args.draw_board_pose_cv2:
-                self.draw_board_pose_cv2(frame, rvec, tvec, axis_length=300)
+                self.draw_board_pose(frame, rvec, tvec, axis_length=300)
 
             # Project 3D points to image plane
             if self.args.project_points:
                 self.project_points(frame, rvec, tvec, objpoints_type=objpoints_type)
         
-        # Draw detected corners
+        # Pretty overlay: amber markers + green black-edged corner dots (+ ids)
         if self.args.draw_charuco_corners:
+            self.draw_detected_markers_pretty(frame, marker_corners, marker_ids)
             self.draw_detected_corners(frame, charuco_corners, charuco_ids)
         
         return frame

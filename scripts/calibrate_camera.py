@@ -112,7 +112,7 @@ def collect_calibration_images(args: argparse.Namespace,
 
         # Visualization
         if marker_corners:
-            detector.draw_detected_markers_cv2(display_frame, marker_corners, marker_ids)
+            detector.draw_detected_markers_pretty(display_frame, marker_corners, marker_ids)
 
         if (charuco_corners is not None) and (len(charuco_corners) > 0):
             detector.draw_detected_corners(display_frame, charuco_corners, charuco_ids)
@@ -280,11 +280,11 @@ def collect_with_quality_assessment(
         # Detect Charuco board
         charuco_corners, charuco_ids, marker_corners, marker_ids = detector.detect_board(display_frame)
 
-        # Draw raw detections (markers + corner dots) on the live frame
+        # Pretty overlay: amber markers + green black-edged corner dots (+ ids)
         if marker_corners:
-            detector.draw_detected_markers_cv2(display_frame, marker_corners, marker_ids)
+            detector.draw_detected_markers_pretty(display_frame, marker_corners, marker_ids)
         if (charuco_corners is not None) and (len(charuco_corners) > 0):
-            detector.draw_detected_corners_cv2(display_frame, charuco_corners, charuco_ids)
+            detector.draw_detected_corners(display_frame, charuco_corners, charuco_ids)
 
         # Evaluate the current view (read-only — does not commit the sample)
         sample = None
@@ -319,7 +319,7 @@ def collect_with_quality_assessment(
                 output_path = os.path.join(args.output_dir, f"calib_{frame_id:04d}.png")
                 cv2.imwrite(output_path, frame)
                 judge.commit(sample)  # only now is the view recorded into coverage
-                logging.info(f"✅ Saved {output_path} — size={sample.size:.3f}, skew={sample.skew:.2f}")
+                logging.info(f"✅ Saved {output_path}")
                 frame_id += 1
             elif sample is not None:
                 logging.warning(f"⚠️ Not saved — {sample.reject_reason}")

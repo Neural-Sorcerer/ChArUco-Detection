@@ -360,9 +360,11 @@ class DataQualityJudge:
         # Queue the incremental calibration (runs on the background worker)
         self._queue_live_calibration(sample)
 
-        logging.info(f"✅ Sample kept: pos=({sample.x:.2f}, {sample.y:.2f}) "
-                     f"size={sample.size:.3f} skew={sample.skew:.2f} "
-                     f"rot={sample.rotation:.0f}° | total={len(self.accepted_samples)}")
+        # Kept quiet at INFO (the caller logs a single "✅ Saved <path>"); the
+        # per-sample metrics stay available at DEBUG for troubleshooting.
+        logging.debug(f"Sample kept: pos=({sample.x:.2f}, {sample.y:.2f}) "
+                      f"size={sample.size:.3f} skew={sample.skew:.2f} "
+                      f"rot={sample.rotation:.0f}° | total={len(self.accepted_samples)}")
 
     def _queue_live_calibration(self, sample: CalibrationSample) -> None:
         """Add a committed view's points and wake the background calibration worker.
@@ -569,9 +571,9 @@ class DataQualityJudge:
                      show_heatmap: bool = False) -> np.ndarray:
         """Augment the live camera frame (kept at full resolution, view unobstructed).
 
-        Only lightweight, non-blocking overlays go on the frame: the board outline, a
-        guidance target, an optional translucent heatmap, and a thin status border.
-        All textual guidance lives in the separate panel (see :meth:`render_panel`).
+        Only lightweight, non-blocking overlays go on the frame: a guidance target,
+        an optional translucent heatmap, and a thin status border. All textual
+        guidance lives in the separate panel (see :meth:`render_panel`).
 
         Args:
             frame: Current BGR frame (already carrying the detector's corner dots).
@@ -586,7 +588,6 @@ class DataQualityJudge:
         progress = self.get_progress_info()
 
         if sample is not None:
-            self._draw_quad(base, sample)
             border_col = (80, 220, 80) if sample.is_accepted else (60, 170, 240)
         else:
             border_col = (60, 60, 230)
@@ -633,12 +634,6 @@ class DataQualityJudge:
             self._report_cache = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
             self._report_cache_n = n
         return self._report_cache
-
-    def _draw_quad(self, frame: np.ndarray, sample: CalibrationSample) -> None:
-        """Outline the detected board quadrilateral."""
-        quad = self._outer_quad(cv2.convexHull(sample.corners.reshape(-1, 2).astype(np.float32)))
-        col = (80, 220, 80) if sample.is_accepted else (60, 170, 240)
-        cv2.polylines(frame, [quad.astype(np.int32)], True, col, max(1, int(2 * frame.shape[1] / 1920)), cv2.LINE_AA)
 
     def _draw_target(self, frame: np.ndarray, target: Tuple[float, float], s: float) -> None:
         """Draw a pulsing target marker where the next view is most needed."""

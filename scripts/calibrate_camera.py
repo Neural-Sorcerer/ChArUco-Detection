@@ -250,25 +250,29 @@ def collect_with_quality_assessment(
         target_samples=args.target_samples
     )
 
-    # One mouse-resizable window: the full camera view with the guidance panel
-    # concatenated on its right. KEEPRATIO keeps the whole frame undistorted.
+    # One mouse-resizable window: the camera view with the guidance panel
+    # concatenated on its right, and the full report stacked below it.
+    # KEEPRATIO keeps the whole frame undistorted.
     win = "Charuco Calibration"
     cv2.namedWindow(win, cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)
 
-    # Size the window to fill the screen at the combined view's aspect ratio (camera
-    # frame + a panel strip scaled to the frame height).
+    # Size the window to fill the screen at the stacked view's aspect ratio: the
+    # camera frame + a panel strip on top, and the report (a 13.5:6.0 figure
+    # resized to the same width) stacked below.
     screen_w, screen_h = _screen_size()
     panel_nat_w, panel_nat_h = 460, 900
     combined_w = resolution[0] + int(panel_nat_w * resolution[1] / panel_nat_h)
-    fit = min((screen_w - 40) / combined_w, (screen_h - 80) / resolution[1])
-    cv2.resizeWindow(win, max(640, int(combined_w * fit)), max(480, int(resolution[1] * fit)))
+    report_h = int(combined_w / (13.5 / 6.0))
+    combined_h = resolution[1] + report_h
+    fit = min((screen_w - 40) / combined_w, (screen_h - 80) / combined_h)
+    cv2.resizeWindow(win, max(640, int(combined_w * fit)), max(480, int(combined_h * fit)))
     cv2.moveWindow(win, 20, 20)
 
-    logging.info("⚠️ Keys: 's' save | 'h' heatmap tint | 'm' full report | 'q' quit")
+    logging.info("⚠️ Keys: 's' save | 'h' heatmap tint | 'm' toggle report strip | 'q' quit")
 
     frame_id = 0
     show_heatmap = False
-    show_report = False
+    show_report = True
 
     while cap.isOpened():
         success, frame = cap.read()
@@ -291,17 +295,24 @@ def collect_with_quality_assessment(
         if (charuco_corners is not None) and (len(charuco_corners) > 0):
             sample = judge.evaluate(charuco_corners, charuco_ids, timestamp=frame_id, image=frame)
 
-        # Single-window view: the full report ('m') or the live frame with the
-        # guidance panel scaled to the frame height and concatenated on its right.
+        # The live frame + guidance panel always stay on top. By default the full
+        # report is stacked below, resized to the top view's width; 'm' toggles that
+        # strip off for an unobstructed, larger camera-only view.
+        cam = judge.render_frame(display_frame, sample, show_heatmap=show_heatmap)
+        panel_nat = judge.render_panel(sample)
+        ph = cam.shape[0]
+        pw = max(1, int(panel_nat.shape[1] * ph / panel_nat.shape[0]))
+        panel = cv2.resize(panel_nat, (pw, ph), interpolation=cv2.INTER_AREA)
+        top = np.hstack([cam, panel])
+
         if show_report:
-            view = judge.render_report_view()
+            report = judge.render_report_view()
+            rw = top.shape[1]
+            rh = max(1, int(report.shape[0] * rw / report.shape[1]))
+            report = cv2.resize(report, (rw, rh), interpolation=cv2.INTER_AREA)
+            view = np.vstack([top, report])
         else:
-            cam = judge.render_frame(display_frame, sample, show_heatmap=show_heatmap)
-            panel_nat = judge.render_panel(sample)
-            ph = cam.shape[0]
-            pw = max(1, int(panel_nat.shape[1] * ph / panel_nat.shape[0]))
-            panel = cv2.resize(panel_nat, (pw, ph), interpolation=cv2.INTER_AREA)
-            view = np.hstack([cam, panel])
+            view = top
         cv2.imshow(win, view)
 
         # Handle keys

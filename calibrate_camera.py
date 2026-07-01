@@ -155,6 +155,26 @@ def collect_calibration_images(args: argparse.Namespace,
     logging.info(f"✅ Collected {frame_id} calibration images")
 
 
+def _screen_size(default: Tuple[int, int] = (1920, 1080)) -> Tuple[int, int]:
+    """Best-effort desktop resolution, used to size the preview windows.
+
+    Args:
+        default: Fallback size when the screen cannot be queried (e.g. headless).
+
+    Returns:
+        The screen (width, height) in pixels.
+    """
+    try:
+        import tkinter
+        root = tkinter.Tk()
+        root.withdraw()
+        size = (root.winfo_screenwidth(), root.winfo_screenheight())
+        root.destroy()
+        return size
+    except Exception:
+        return default
+
+
 def collect_with_quality_assessment(
     args: argparse.Namespace,
     detector: CharucoDetector,
@@ -172,12 +192,6 @@ def collect_with_quality_assessment(
     # Create output directory
     os.makedirs(args.output_dir, exist_ok=True)
 
-    # Initialize data quality judge
-    judge = DataQualityJudge(
-        image_size=resolution,
-        target_samples=args.target_samples
-    )
-
     # Open camera or video file
     if args.index.isdigit():
         cap = cv2.VideoCapture(int(args.index), cv2.CAP_V4L2)
@@ -192,14 +206,43 @@ def collect_with_quality_assessment(
         logging.error(f"❌ Cannot open camera {args.index}")
         return
 
-    # Create window
-    winname = "Quality-Aware Calibration Collection"
-    cv2.namedWindow(winname, cv2.WINDOW_NORMAL)
-    cv2.resizeWindow(winname, width=Resolution.HD[0] + 350, height=Resolution.HD[1])
+    # Use the resolution the camera ACTUALLY delivers: a webcam silently ignores a
+    # request it cannot honor (e.g. 720p hardware asked for UHD). Every metric is
+    # normalized by this size, so a mismatch would corrupt all coverage scoring.
+    actual_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    actual_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    if actual_w > 0 and actual_h > 0 and (actual_w, actual_h) != tuple(resolution):
+        logging.warning(f"⚠️ Camera delivered {actual_w}x{actual_h}, not the requested "
+                        f"{resolution[0]}x{resolution[1]} — using the actual size")
+        resolution = (actual_w, actual_h)
 
-    logging.info("⚠️ Press 's' to save, 'h' for heatmap, 'q' to quit")
+    # Initialize data quality judge (board enables a live reprojection-error readout)
+    judge = DataQualityJudge(
+        image_size=resolution,
+        board=detector.board_config.board,
+        min_sharpness=args.min_sharpness,
+        target_samples=args.target_samples
+    )
+
+    # One mouse-resizable window: the full camera view with the guidance panel
+    # concatenated on its right. KEEPRATIO keeps the whole frame undistorted.
+    win = "Charuco Calibration"
+    cv2.namedWindow(win, cv2.WINDOW_NORMAL | cv2.WINDOW_KEEPRATIO)
+
+    # Size the window to fill the screen at the combined view's aspect ratio (camera
+    # frame + a panel strip scaled to the frame height).
+    screen_w, screen_h = _screen_size()
+    panel_nat_w, panel_nat_h = 460, 900
+    combined_w = resolution[0] + int(panel_nat_w * resolution[1] / panel_nat_h)
+    fit = min((screen_w - 40) / combined_w, (screen_h - 80) / resolution[1])
+    cv2.resizeWindow(win, max(640, int(combined_w * fit)), max(480, int(resolution[1] * fit)))
+    cv2.moveWindow(win, 20, 20)
+
+    logging.info("⚠️ Keys: 's' save | 'h' heatmap tint | 'm' full report | 'q' quit")
 
     frame_id = 0
+    show_heatmap = False
+    show_report = False
 
     while cap.isOpened():
         success, frame = cap.read()
@@ -211,55 +254,56 @@ def collect_with_quality_assessment(
         # Detect Charuco board
         charuco_corners, charuco_ids, marker_corners, marker_ids = detector.detect_board(display_frame)
 
-        # Visualization
+        # Draw raw detections (markers + corner dots) on the live frame
         if marker_corners:
             detector.draw_detected_markers_cv2(display_frame, marker_corners, marker_ids)
-
-        sample_quality = None
         if (charuco_corners is not None) and (len(charuco_corners) > 0):
-            detector.draw_detected_corners(display_frame, charuco_corners, charuco_ids)
+            detector.draw_detected_corners_cv2(display_frame, charuco_corners, charuco_ids)
 
-            # Evaluate sample quality
-            sample_quality = judge.evaluate_sample(charuco_corners, timestamp=frame_id)
+        # Evaluate the current view (read-only — does not commit the sample)
+        sample = None
+        if (charuco_corners is not None) and (len(charuco_corners) > 0):
+            sample = judge.evaluate(charuco_corners, charuco_ids, timestamp=frame_id, image=frame)
 
-            # Show quality information
-            quality_color = (0, 255, 0) if sample_quality.is_accepted else (0, 165, 255)
-            quality_text = "GOOD SAMPLE" if sample_quality.is_accepted else "POOR/DUPLICATE"
-
-            cv2.putText(display_frame, f"Corners: {len(charuco_corners)} | {quality_text}",
-                       (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.8, quality_color, 2)
-
-            cv2.putText(display_frame, f"Size: {sample_quality.size:.3f} | Skew: {sample_quality.skew:.3f}",
-                       (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+        # Single-window view: the full report ('m') or the live frame with the
+        # guidance panel scaled to the frame height and concatenated on its right.
+        if show_report:
+            view = judge.render_report_view()
         else:
-            cv2.putText(display_frame, "No corners detected", (10, 30),
-                       cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2)
-
-        # Add progress overlay
-        display_frame_with_progress = judge.render_progress_overlay(display_frame)
-        cv2.imshow(winname, display_frame_with_progress)
+            cam = judge.render_frame(display_frame, sample, show_heatmap=show_heatmap)
+            panel_nat = judge.render_panel(sample)
+            ph = cam.shape[0]
+            pw = max(1, int(panel_nat.shape[1] * ph / panel_nat.shape[0]))
+            panel = cv2.resize(panel_nat, (pw, ph), interpolation=cv2.INTER_AREA)
+            view = np.hstack([cam, panel])
+        cv2.imshow(win, view)
 
         # Handle keys
         key = cv2.waitKey(1) & 0xFF
+        save_request = (key == ord('s')) or (args.auto_save and sample is not None and sample.is_accepted)
+
         if key == ord('q'):
             break
         elif key == ord('h'):
-            heatmap_path = os.path.join(args.output_dir, "position_heatmap.png")
-            judge.generate_heatmap(heatmap_path)
-        elif key == ord('s') or (args.auto_save and sample_quality and sample_quality.is_accepted):
-            if sample_quality and sample_quality.is_accepted:
+            show_heatmap = not show_heatmap
+        elif key == ord('m'):
+            show_report = not show_report
+        elif save_request:
+            if sample is not None and sample.is_accepted:
                 output_path = os.path.join(args.output_dir, f"calib_{frame_id:04d}.png")
                 cv2.imwrite(output_path, frame)
-                logging.info(f"✅ Saved {output_path} - Quality: size={sample_quality.size:.3f}, skew={sample_quality.skew:.3f}")
+                judge.commit(sample)  # only now is the view recorded into coverage
+                logging.info(f"✅ Saved {output_path} — size={sample.size:.3f}, skew={sample.skew:.2f}")
                 frame_id += 1
-            elif charuco_corners is not None and len(charuco_corners) >= 4:
-                logging.warning("⚠️ Sample not saved - poor quality or too similar")
+            elif sample is not None:
+                logging.warning(f"⚠️ Not saved — {sample.reject_reason}")
             else:
-                logging.warning("⚠️ Not enough corners detected")
+                logging.warning("⚠️ Not saved — no board detected")
 
     # Cleanup and generate reports
     cap.release()
     cv2.destroyAllWindows()
+    judge.close()  # retire the background calibration worker
 
     heatmap_path = os.path.join(args.output_dir, "final_heatmap.png")
     judge.generate_heatmap(heatmap_path)
@@ -276,16 +320,17 @@ def collect_with_quality_assessment(
         logging.warning(f"⚠️ Consider collecting more samples (target: {judge.target_samples})")
 
 
-def filter_existing_dataset(args: argparse.Namespace) -> None:
+def filter_existing_dataset(args: argparse.Namespace, detector: CharucoDetector) -> None:
     """Filter an existing dataset to remove redundant samples.
 
     Args:
         args: Command-line arguments
+        detector: CharucoDetector instance (uses the board from the CLI args)
     """
     logging.info(f"⭐ ───────────── Filtering Existing Dataset ───────────── ⭐")
 
-    import glob
     from time import time
+    import shutil
 
     # Find all images in input directory
     image_files = sorted(glob.glob(os.path.join(args.input_dir, "**", "*.png"), recursive=True))
@@ -296,12 +341,6 @@ def filter_existing_dataset(args: argparse.Namespace) -> None:
         return
 
     logging.info(f"Found {len(image_files)} images to filter")
-
-    # Create detector for corner detection
-    board_config = CharucoBoardConfig()
-    detector_config = DetectorConfig()
-    charuco_detector_config = CharucoDetectorConfig()
-    detector = CharucoDetector(board_config, detector_config, charuco_detector_config)
 
     # Initialize quality judge
     sample_image = cv2.imread(image_files[0])
@@ -325,7 +364,7 @@ def filter_existing_dataset(args: argparse.Namespace) -> None:
         charuco_corners, charuco_ids, _, _ = detector.detect_board(image)
 
         if charuco_corners is not None and len(charuco_corners) >= 4:
-            sample = judge.evaluate_sample(charuco_corners, image_file, time())
+            sample = judge.evaluate(charuco_corners, charuco_ids, image_file, time())
             samples.append(sample)
 
     # Filter samples for diversity
@@ -339,7 +378,6 @@ def filter_existing_dataset(args: argparse.Namespace) -> None:
         dst_path = os.path.join(args.output_dir, f"filtered_{i:04d}.png")
 
         # Copy image
-        import shutil
         shutil.copy2(src_path, dst_path)
 
     # Generate reports
@@ -428,8 +466,8 @@ def test_calibration(args: argparse.Namespace, calibrator: CameraCalibrator) -> 
             logging.warning(f"⚠️ Could not read image {image_file}")
             continue
 
-        # Undistort
-        undistorted = calibrator.undistort_image(image, args.balance, args.simple)
+        # Undistort (undistort_image returns the image and the new camera matrix)
+        undistorted, _ = calibrator.undistort_image(image, args.balance, args.simple)
 
         # Save undistorted image
         output_path = os.path.join(undistort_dir, f"undistorted_{i:04d}.png")
@@ -446,7 +484,7 @@ def main() -> None:
     # Common arguments
     parser.add_argument('--board-id', type=int, default=0, help='Charuco board ID')
     parser.add_argument('--x-squares', type=int, default=7, help='Number of squares in X direction')
-    parser.add_argument('--y-squares', type=int, default=7, help='Number of squares in Y direction')
+    parser.add_argument('--y-squares', type=int, default=5, help='Number of squares in Y direction')
     parser.add_argument('--square-length', type=float, default=0.10, help='Square length in meters')
     parser.add_argument('--marker-length', type=float, default=None, help='Marker length in meters (default: 75% of square length)')
 
@@ -463,10 +501,11 @@ def main() -> None:
     collect_parser = subparsers.add_parser('collect', help='Collect calibration images')
     collect_parser.add_argument('--index', type=str, default="0", help='Camera index or video file path')
     collect_parser.add_argument('--output-dir', type=str, default='calibration_images', help='Output directory for calibration images')
-    collect_parser.add_argument('--resolution', type=str, default='OMS', choices=['SS', 'SD', 'HD', 'FHD', 'UHD', 'OMS'], help='Camera resolution')
+    collect_parser.add_argument('--resolution', type=str, default='SD', choices=['SS', 'SD', 'HD', 'FHD', 'UHD', 'OMS'], help='Camera resolution')
     collect_parser.add_argument('--use-quality-judge', action='store_true', help='Use data quality assessment during collection')
     collect_parser.add_argument('--target-samples', type=int, default=50, help='Target number of diverse samples')
     collect_parser.add_argument('--auto-save', action='store_true', help='Automatically save good quality samples')
+    collect_parser.add_argument('--min-sharpness', type=float, default=100.0, help='Reject blurry/motion-blurred views below this focus score (variance of Laplacian); raise it if you move fast, set 0 to disable')
 
     # Calibrate mode
     calibrate_parser = subparsers.add_parser('calibrate', help='Calibrate camera from images')
@@ -522,7 +561,7 @@ def main() -> None:
                                   margin_percent=args.margin_percent)
 
     elif args.mode == 'filter':
-        filter_existing_dataset(args)
+        filter_existing_dataset(args, detector)
 
     else:
         parser.print_help()
@@ -551,7 +590,7 @@ python calibrate_camera.py calibrate \
 
 python calibrate_camera.py collect \
     --index=0 \
-    --output-dir=calibration_images/calibration_images_test \
+    --output-dir=calibration_images/calibration_images_test_AI \
     --target-samples=50 \
     --auto-save \
     --use-quality-judge

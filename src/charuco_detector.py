@@ -96,13 +96,14 @@ class CharucoDetector:
     def set_camera_params(self) -> None:
         """Set camera intrinsic parameters."""
         try:
-            # Load camera parameters
-            if self.args.camera_params is None:
+            # Load camera parameters (modes such as 'collect'/'filter' don't define --camera-params)
+            camera_params = getattr(self.args, "camera_params", None)
+            if camera_params is None:
                 # Create synthetic camera parameters if not available
                 if (self.camera_matrix is None) and (self.dist_coeffs is None):
                     self.set_synthetic_camera_params(fov_deg=60)
             else:
-                params = CameraCalibrator.load_calibration_parameters(self.args.camera_params)
+                params = CameraCalibrator.load_calibration_parameters(camera_params)
                 
                 self.camera_matrix = params["camera_matrix"]
                 self.dist_coeffs = params["dist_coeffs"]
@@ -138,7 +139,7 @@ class CharucoDetector:
                 width = resolution[0]
                 height = resolution[1]
             else:
-                width, height = getattr(Resolution,  self.args.resolution)
+                width, height = getattr(Resolution, getattr(self.args, "resolution", "OMS"))
                 
             # Principal point at the center of the image
             cx = width / 2
@@ -159,7 +160,7 @@ class CharucoDetector:
             ], dtype=np.float64)
             self.dist_coeffs = np.zeros((4, 1), dtype=np.float64)
             
-            logging.info(f"✅ Synthetic camera parameters set for resolution {self.args.resolution}.")
+            logging.info(f"✅ Synthetic camera parameters set for resolution {width}x{height}.")
         except Exception as e:
             logging.error(f"❌ Error setting synthetic camera parameters: {str(e)}")
 

@@ -70,16 +70,16 @@ def visualize_corners(json_path, image_dir):
             
             # Draw circle
             cv2.circle(image, (x, y), 8, (0, 255, 0), -1) # Green filled circle
-            cv2.circle(image, (x, y), 8, (0, 0, 0), 1)    # Black outline
-            
-            # Draw ID
-            cv2.putText(image, id_str, (x + 8, y - 8), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 2, cv2.LINE_AA)
+            cv2.circle(image, (x, y), 8, (0, 0, 0), 2)    # Black outline
+
+            # Draw ID (black-edged so it reads over any background)
+            _put_edged_text(image, id_str, (x + 8, y - 8), 1.0, (0, 0, 255), 2)
 
         # Draw info text
-        cv2.putText(image, f"Image: {image_name} ({i+1}/{len(samples)})", (10, 30), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
-        cv2.putText(image, f"Points: {len(keypoints)}", (10, 60), 
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2, cv2.LINE_AA)
+        _put_edged_text(image, f"Image: {image_name} ({i+1}/{len(samples)})", (10, 30),
+                        0.7, (255, 255, 255), 2)
+        _put_edged_text(image, f"Points: {len(keypoints)}", (10, 60),
+                        0.7, (255, 255, 255), 2)
 
         # Show image
         win_name = "Calibration Corners Visualization"

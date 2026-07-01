@@ -505,7 +505,7 @@ def main() -> None:
     collect_parser.add_argument('--use-quality-judge', action='store_true', help='Use data quality assessment during collection')
     collect_parser.add_argument('--target-samples', type=int, default=50, help='Target number of diverse samples')
     collect_parser.add_argument('--auto-save', action='store_true', help='Automatically save good quality samples')
-    collect_parser.add_argument('--min-sharpness', type=float, default=100.0, help='Reject blurry/motion-blurred views below this focus score (variance of Laplacian); raise it if you move fast, set 0 to disable')
+    collect_parser.add_argument('--min-sharpness', type=float, default=400.0, help='Reject blurry/motion-blurred views below this focus score (variance of Laplacian); raise it if you move fast, set 0 to disable')
 
     # Calibrate mode
     calibrate_parser = subparsers.add_parser('calibrate', help='Calibrate camera from images')

@@ -91,26 +91,6 @@ def run_pipeline(args: argparse.Namespace,
 
         frame_id = 0
 
-
-        # import glob
-
-        # class ImageSequence:
-        #     def __init__(self, folder):
-        #         self.images = sorted(glob.glob(os.path.join(folder, "*.[jp][pn]g")))
-        #         self.index = 0
-        #     def isOpened(self):
-        #         return self.index < len(self.images)
-        #     def read(self):
-        #         if self.index < len(self.images):
-        #             img = cv2.imread(self.images[self.index])
-        #             self.index += 1
-        #             return img is not None, img
-        #         return False, None
-        #     def release(self):
-        #         pass
-
-        # cap = ImageSequence("Cam_001")
-
         # Process video/camera feed
         while cap.isOpened():
             success, original = cap.read()
@@ -146,18 +126,9 @@ def run_pipeline(args: argparse.Namespace,
 
 def main() -> None:
     """Main function to run the Charuco detection pipeline."""
-    # Default path for sample image
-    # path = "assets/charuco_boards/charuco_board_7x7.png"
-    # path = "calibration_images/calibration_images_0/calib_0039.png"
-    # intrinsics = "calibration_images/calibration_images_0/calibration.xml"
-    # path =  "data/ti_camera_input/"
-    # intrinsics = None
-    rtsp_link_left = "rtsp://admin:Deltax968@169.254.0.2:554/8860"
-    rtsp_link_right = "rtsp://admin:Deltax968@169.254.0.3:554/8860"
-    
     # Parse command-line arguments
     parser = argparse.ArgumentParser(description="Charuco board detection for camera calibration")
-    parser.add_argument('--index', default=rtsp_link_left, type=str, help='Camera index, video file path, or image path')
+    parser.add_argument('--index', default="0", type=str, help='Camera index, video file path, or image path')
     parser.add_argument('--camera-params', default=None, type=str, help='Path to camera calibration file')
     parser.add_argument('--resolution', type=str, default='FHD', choices=['SS', 'SD', 'HD', 'FHD', 'UHD', 'OMS'], help='Camera resolution')
     

@@ -1,8 +1,8 @@
+import os
 import cv2
 import json
-import os
 import argparse
-import numpy as np
+
 
 def visualize_corners(json_path, image_dir):
     """
@@ -88,12 +88,11 @@ def visualize_corners(json_path, image_dir):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Visualize calibration corners from JSON")
     parser.add_argument("--json", type=str, 
-                        default="calibration_images/merged_0_2_4_6/calibration_corners.json",
+                        default="calibration_images/calibration_images_0/calibration_corners.json",
                         help="Path to calibration_corners.json")
     parser.add_argument("--images", type=str, 
-                        default="calibration_images/merged_0_2_4_6",
+                        default="calibration_images/calibration_images_0",
                         help="Directory containing calibration images")
-    
     args = parser.parse_args()
     
     visualize_corners(args.json, args.images)

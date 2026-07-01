@@ -43,8 +43,6 @@ def run_pipeline(args: argparse.Namespace,
         winname: Window name for display
     """
     # Load all PNG images from the directory
-    # Check if the path exists
-    # Find all images
     image_paths = sorted(glob.glob(os.path.join(args.index, "**", "*.jpg"), recursive=True))
     
     # Create a window

@@ -502,7 +502,7 @@ def test_calibration(args: argparse.Namespace, calibrator: CameraCalibrator) -> 
     logging.info(f"✅ Undistorted images saved to {undistort_dir}")
 
 
-def main() -> None:
+def main(argv: Optional[List[str]] = None) -> None:
     """Main function."""
     # Parse command-line arguments
     parser = argparse.ArgumentParser(description="Camera calibration using Charuco boards")
@@ -512,7 +512,7 @@ def main() -> None:
     parser.add_argument('--x-squares', type=int, default=7, help='Number of squares in X direction')
     parser.add_argument('--y-squares', type=int, default=5, help='Number of squares in Y direction')
     parser.add_argument('--square-length', type=float, default=0.10, help='Square length in meters')
-    parser.add_argument('--marker-length', type=float, default=None, help='Marker length in meters (default: 75% of square length)')
+    parser.add_argument('--marker-length', type=float, default=None, help='Marker length in meters (default: 75%% of square length)')
 
     # Subparsers for different modes
     subparsers = parser.add_subparsers(dest='mode', help='Operation mode')
@@ -521,7 +521,7 @@ def main() -> None:
     generate_parser = subparsers.add_parser('generate', help='Generate Charuco board image')
     generate_parser.add_argument('--output-file', type=str, default='charuco_board.png', help='Output file for board image')
     generate_parser.add_argument('--pixels-per-square', type=int, default=300, help='Pixels per square')
-    generate_parser.add_argument('--margin-percent', type=float, default=0.05, help='Margin around the board as a percentage (0.05 = 5%) of the minimum grid dimension')
+    generate_parser.add_argument('--margin-percent', type=float, default=0.05, help='Margin around the board as a percentage (0.05 = 5%%) of the minimum grid dimension')
 
     # Collect mode
     collect_parser = subparsers.add_parser('collect', help='Collect calibration images')
@@ -549,7 +549,7 @@ def main() -> None:
     filter_parser.add_argument('--output-dir', type=str, default='filtered_images', help='Output directory for filtered images')
     filter_parser.add_argument('--target-samples', type=int, default=50, help='Target number of diverse samples')
 
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     # Force all collected/calibrated artifacts under outputs/; an absolute path
     # passed manually on the CLI is respected as an override.
@@ -602,41 +602,3 @@ def main() -> None:
 
 if __name__ == '__main__':
     main()
-
-"""
-python calibrate_camera.py calibrate \
-    --input-dir=calibration_images/calibration_images_0 \
-    --fisheye
-    
-python calibrate_camera.py calibrate \
-    --input-dir=calibration_images/calibration_images_8 \
-    --output-file=calibration_images_8/calibration.xml \
-    --undistort \
-    --balance=0.0
-
-python calibrate_camera.py calibrate \
-    --input-dir=calibration_images/calibration_images_0 \
-    --output-file=calibration.xml \
-    --fisheye \
-    --undistort \
-    --balance=0.0
-
-python calibrate_camera.py collect \
-    --index=0 \
-    --output-dir=calibration_images/calibration_images_test_AI \
-    --target-samples=50 \
-    --auto-save \
-    --use-quality-judge
-    
-        
-    collect_parser.add_argument('--use-quality-judge', action='store_true', help='Use data quality assessment during collection')
-    collect_parser.add_argument('--target-samples', type=int, default=50, help='Target number of diverse samples')
-
-
-python calibrate_camera.py calibrate \
-    --input-dir=data/ti_camera_input \
-    --output-file=calibration.xml \
-    --fisheye \
-    --undistort \
-    --balance=0.0
-"""

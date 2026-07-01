@@ -85,14 +85,18 @@ def visualize_corners(json_path, image_dir):
 
     cv2.destroyAllWindows()
 
-if __name__ == "__main__":
+def main(argv=None):
     parser = argparse.ArgumentParser(description="Visualize calibration corners from JSON")
-    parser.add_argument("--json", type=str, 
+    parser.add_argument("--json", type=str,
                         default="calibration_images/calibration_images_0/calibration_corners.json",
                         help="Path to calibration_corners.json")
-    parser.add_argument("--images", type=str, 
+    parser.add_argument("--images", type=str,
                         default="calibration_images/calibration_images_0",
                         help="Directory containing calibration images")
-    args = parser.parse_args()
-    
+    args = parser.parse_args(argv)
+
     visualize_corners(args.json, args.images)
+
+
+if __name__ == "__main__":
+    main()

@@ -362,6 +362,7 @@ class CameraCalibrator:
             logging.error(f"❌ Error saving calibration JSON: {str(e)}")
             return False
 
+    @staticmethod
     def load_calibration_parameters(file_path: str
             ) -> Optional[Tuple[np.ndarray, np.ndarray, Tuple[int, int], bool, Optional[float]]]:
         """Load calibration parameters from an XML file.

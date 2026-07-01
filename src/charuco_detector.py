@@ -87,9 +87,15 @@ class CharucoDetector:
         Args:
             charuco_ids: IDs of detected Charuco corners
         """
+        # No board detected this frame -> nothing to select. Clear any stale
+        # temp points and skip (this is normal for a live feed, not an error).
+        if charuco_ids is None or len(charuco_ids) == 0:
+            self.objpoints["temp"] = None
+            return
+
         try:
             self.objpoints["temp"] = self.objpoints["inner-corners"][charuco_ids.flatten()]
-        
+
         except Exception as e:
             logging.error(f"❌ Error during setting temporary object points: {str(e)}")
     

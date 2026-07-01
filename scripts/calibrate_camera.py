@@ -26,7 +26,7 @@ from configs.config import Resolution, CharucoBoardConfig, DetectorConfig, Charu
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
-    datefmt='%Y-%m-%d %H:%M:%S'  # Removes milliseconds
+    datefmt='%Y-%m-%d %H:%M:%S'
 )
 logging = logging.getLogger(__name__)
 np.set_printoptions(suppress=True, precision=14)
@@ -527,11 +527,11 @@ def main(argv: Optional[List[str]] = None) -> None:
     collect_parser = subparsers.add_parser('collect', help='Collect calibration images')
     collect_parser.add_argument('--index', type=str, default="0", help='Camera index or video file path')
     collect_parser.add_argument('--output-dir', type=str, default='calibration_images', help='Output directory for calibration images')
-    collect_parser.add_argument('--resolution', type=str, default='SD', choices=['SS', 'SD', 'HD', 'FHD', 'UHD', 'OMS'], help='Camera resolution')
-    collect_parser.add_argument('--use-quality-judge', action='store_true', help='Use data quality assessment during collection')
-    collect_parser.add_argument('--target-samples', type=int, default=50, help='Target number of diverse samples')
-    collect_parser.add_argument('--auto-save', action='store_true', help='Automatically save good quality samples')
+    collect_parser.add_argument('--resolution', type=str, default='HD', choices=['SS', 'SD', 'HD', 'FHD', 'UHD', 'OMS'], help='Camera resolution')
+    collect_parser.add_argument('--target-samples', type=int, default=100, help='Target number of diverse samples')
     collect_parser.add_argument('--min-sharpness', type=float, default=400.0, help='Reject blurry/motion-blurred views below this focus score (variance of Laplacian); raise it if you move fast, set 0 to disable')
+    collect_parser.add_argument('--use-quality-judge', action='store_true', help='Use data quality assessment during collection')
+    collect_parser.add_argument('--auto-save', action='store_true', help='Automatically save good quality samples')
 
     # Calibrate mode
     calibrate_parser = subparsers.add_parser('calibrate', help='Calibrate camera from images')

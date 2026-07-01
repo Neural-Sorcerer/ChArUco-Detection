@@ -3,6 +3,7 @@ temp/
 visualization_3d/gaze_data/
 data/
 calibration_images/
+outputs/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

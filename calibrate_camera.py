@@ -25,11 +25,37 @@ from configs.config import Resolution, CharucoBoardConfig, DetectorConfig, Charu
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s - %(name)s:%(lineno)02d - %(levelname)s - %(message)s',
+    format='%(asctime)s - %(levelname)s - %(message)s',
     datefmt='%Y-%m-%d %H:%M:%S'  # Removes milliseconds
 )
 logging = logging.getLogger(__name__)
 np.set_printoptions(suppress=True, precision=14)
+
+# Every collected and calibrated artifact is rooted here, regardless of the
+# --output-dir / --output-file passed on the CLI (see _under_outputs).
+OUTPUT_ROOT = "outputs"
+
+
+def _under_outputs(path: str) -> str:
+    """Redirect a relative output path under the top-level ``outputs/`` directory.
+
+    Whatever ``--output-dir`` / ``--output-file`` is given, the result is forced
+    to live under ``outputs/`` so every collected and calibrated artifact ends up
+    in one place. An absolute path is treated as a manual override and returned
+    unchanged.
+
+    Args:
+        path: The output directory or file path from the CLI.
+
+    Returns:
+        The path rooted under ``outputs/`` (or unchanged if absolute).
+    """
+    if os.path.isabs(path):
+        return path
+    normalized = os.path.normpath(path)
+    if normalized.split(os.sep)[0] == OUTPUT_ROOT:
+        return normalized
+    return os.path.join(OUTPUT_ROOT, normalized)
 
 
 def collect_calibration_images(args: argparse.Namespace,
@@ -524,6 +550,13 @@ def main() -> None:
     filter_parser.add_argument('--target-samples', type=int, default=50, help='Target number of diverse samples')
 
     args = parser.parse_args()
+
+    # Force all collected/calibrated artifacts under outputs/; an absolute path
+    # passed manually on the CLI is respected as an override.
+    if getattr(args, 'output_dir', None) is not None:
+        args.output_dir = _under_outputs(args.output_dir)
+    if args.mode == 'calibrate' and getattr(args, 'output_file', None) is not None:
+        args.output_file = _under_outputs(args.output_file)
 
     # Create configurations
     board_config = CharucoBoardConfig(

@@ -128,9 +128,9 @@ def main() -> None:
     """Main function to run the Charuco detection pipeline."""
     # Parse command-line arguments
     parser = argparse.ArgumentParser(description="Charuco board detection for camera calibration")
-    parser.add_argument('--index', default="0", type=str, help='Camera index, video file path, or image path')
+    parser.add_argument('--index', default="6", type=str, help='Camera index, video file path, or image path')
     parser.add_argument('--camera-params', default=None, type=str, help='Path to camera calibration file')
-    parser.add_argument('--resolution', type=str, default='FHD', choices=['SS', 'SD', 'HD', 'FHD', 'UHD', 'OMS'], help='Camera resolution')
+    parser.add_argument('--resolution', type=str, default='HD', choices=['SS', 'SD', 'HD', 'FHD', 'UHD', 'OMS'], help='Camera resolution')
     
     # Visualization arguments
     parser.add_argument('--draw-charuco-markers-cv2',
@@ -149,7 +149,7 @@ def main() -> None:
     # Charuco board arguments
     parser.add_argument('--board-id', type=int, default=0, help='Charuco board ID')
     parser.add_argument('--x-squares', type=int, default=7, help='Number of squares in X direction')
-    parser.add_argument('--y-squares', type=int, default=7, help='Number of squares in Y direction')
+    parser.add_argument('--y-squares', type=int, default=5, help='Number of squares in Y direction')
     parser.add_argument('--square-length', type=float, default=0.053, help='Square length in meters')
     parser.add_argument('--marker-length', type=float, default=None, help='Marker length in meters (default: 75% of square length)')
 

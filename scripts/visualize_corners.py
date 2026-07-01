@@ -4,6 +4,14 @@ import json
 import argparse
 
 
+def _put_edged_text(image, text, org, font_scale, color, thickness, edge_color=(0, 0, 0)):
+    """Draw text with a black outline so ids/labels stay readable over any background."""
+    cv2.putText(image, text, org, cv2.FONT_HERSHEY_SIMPLEX, font_scale,
+                edge_color, thickness + 2, cv2.LINE_AA)
+    cv2.putText(image, text, org, cv2.FONT_HERSHEY_SIMPLEX, font_scale,
+                color, thickness, cv2.LINE_AA)
+
+
 def visualize_corners(json_path, image_dir):
     """
     Visualizes corners and IDs from a JSON file on the corresponding images.

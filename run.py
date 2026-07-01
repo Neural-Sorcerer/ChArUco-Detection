@@ -52,7 +52,7 @@ def main():
     """Select a tool and forward the remaining CLI arguments to it."""
     pipeline = CharucoCalibrationPipeline()
     tools = {
-        "detect": pipeline.detect,
+        "detect":    pipeline.detect,
         "calibrate": pipeline.calibrate,
         "visualize": pipeline.visualize,
     }

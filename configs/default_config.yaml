@@ -1,0 +1,51 @@
+# Default configuration for the Charuco Studio GUI.
+# Load/save from the GUI (File menu) or edit by hand.
+
+camera:
+  device: 0                 # /dev/videoN index
+  resolution: [1280, 720]   # [width, height]
+  fps: 30
+  fourcc: "MJPG"            # MJPG / YUYV / ...
+
+board:
+  board_id: 0
+  x_squares: 7
+  y_squares: 5
+  square_length: 0.03       # meters
+  marker_length: null       # null -> 75% of square_length
+  dictionary: "DICT_6X6_1000"
+
+calibration:
+  camera_params: null       # path to an intrinsics .xml; null -> synthetic intrinsics
+  fisheye: false
+  fisheye_fov: 180.0        # informational field of view (deg) for the fisheye model
+  mode: "Intrinsic"         # Intrinsic | Multi-camera | Data collection only
+
+collection:
+  output_dir: "outputs"
+  session_name: "calibration_session"
+  auto_timestamp_folder: true
+  save_raw_frames: true
+  save_visualized_frames: false
+  save_metadata: true
+  auto_capture: false
+  capture_interval: 1.0     # seconds between auto captures (plain mode)
+  # Quality-guided collection (mirrors `run.py calibrate collect --use-quality-judge`)
+  use_quality_judge: true
+  target_samples: 100
+  min_sharpness: 400.0      # variance of Laplacian; 0 disables the blur gate
+  auto_save: false          # auto-keep every accepted (diverse + sharp) view
+  show_heatmap: false       # tint the live frame with the coverage heatmap
+
+visualization:
+  show_fps: false                # FPS is shown in the top bar, never on the frame
+  show_frame_counter: false
+  show_markers: false            # cv2.aruco.drawDetectedMarkers
+  show_corners: true             # pretty green inner-corner dots + ids
+  show_corners_cv2: false        # cv2.aruco.drawDetectedCornersCharuco
+  show_board_pose: true          # draw the board XYZ axes
+  use_estimate_pose_board: false # estimatePoseCharucoBoard vs solvePnP
+  project_points: true           # project the board's 3D grid back onto the image
+  show_center_point: false
+  show_grid: false
+  show_debug_text: false

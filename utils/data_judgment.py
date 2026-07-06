@@ -22,6 +22,15 @@ import matplotlib
 import matplotlib.pyplot as plt
 import matplotlib.patheffects as pe
 
+# cv2.calibrateCamera refits from scratch on every commit, and its cost grows
+# non-linearly with the number of views fed into it (measured ~0.07s at 10 views,
+# ~6s at 80, ~11s at 100 on a typical desktop). Left unbounded, the live RMS
+# worker gets slower every single save as a session progresses, stealing a full
+# CPU core for seconds at a time and stuttering the live camera preview. The live
+# readout only needs a representative recent window to be useful, so the worker
+# is capped to the most recent N views regardless of how many have been accepted.
+LIVE_CALIBRATION_MAX_VIEWS = 40
+
 
 @dataclass
 class CalibrationSample:
@@ -132,7 +141,16 @@ class DataQualityJudge:
             self._cal_thread = threading.Thread(target=self._calibration_worker, daemon=True)
             self._cal_thread.start()
 
-        # Cache for the full report view (regenerated only when a new view is kept)
+        # Cache for the full report view, refreshed by a background worker (started
+        # lazily on the first render_report_view() call). Rendering the matplotlib
+        # heatmap+radar figure takes 100s of ms, which froze the live camera preview
+        # on every save; the worker rebuilds it off-thread and render_report_view()
+        # just returns whatever is cached, so the report can lag a commit or two
+        # behind while the camera view and panel stay real-time.
+        self._report_lock = threading.Lock()
+        self._report_dirty = threading.Event()
+        self._report_stop = threading.Event()
+        self._report_thread: Optional[threading.Thread] = None
         self._report_cache: Optional[np.ndarray] = None
         self._report_cache_n: int = -1
 
@@ -305,7 +323,7 @@ class DataQualityJudge:
         else:
             dist = self._nearest_distance(sample.feature)
             if dist < self.min_distance_threshold:
-                sample.reject_reason = "duplicate (move/tilt the board)"
+                sample.reject_reason = "duplicate (move / tilt the board)"
             else:
                 sample.is_accepted = True
 
@@ -360,6 +378,9 @@ class DataQualityJudge:
         # Queue the incremental calibration (runs on the background worker)
         self._queue_live_calibration(sample)
 
+        # Wake the report worker to rebuild the heatmap/radar figure off-thread
+        self._report_dirty.set()
+
         # Kept quiet at INFO (the caller logs a single "✅ Saved <path>"); the
         # per-sample metrics stay available at DEBUG for troubleshooting.
         logging.debug(f"Sample kept: pos=({sample.x:.2f}, {sample.y:.2f}) "
@@ -387,6 +408,11 @@ class DataQualityJudge:
         with self._cal_lock:
             self.obj_points.append(obj.reshape(-1, 1, 3).astype(np.float32))
             self.img_points.append(img.reshape(-1, 1, 2).astype(np.float32))
+            # Keep only the most recent views so calibrateCamera's cost stays
+            # bounded for the whole session (see LIVE_CALIBRATION_MAX_VIEWS).
+            if len(self.obj_points) > LIVE_CALIBRATION_MAX_VIEWS:
+                self.obj_points = self.obj_points[-LIVE_CALIBRATION_MAX_VIEWS:]
+                self.img_points = self.img_points[-LIVE_CALIBRATION_MAX_VIEWS:]
         self._cal_dirty.set()  # ask the worker to recompute the live RMS
 
     def _calibration_worker(self) -> None:
@@ -419,17 +445,43 @@ class DataQualityJudge:
             except cv2.error:
                 pass
 
-    def close(self) -> None:
-        """Stop the background calibration worker (call when collection ends).
+    def _report_worker(self) -> None:
+        """Rebuild the report figure off the capture thread whenever a view is kept.
 
-        Waits for any in-flight ``cv2.calibrateCamera`` to finish before returning, so
-        the worker is never force-killed mid-native-call at interpreter exit.
+        Mirrors :meth:`_calibration_worker`: waits for :meth:`commit` to mark the
+        cache dirty, then re-renders (matplotlib is slow) with no lock held, so the
+        capture thread is never blocked on it. Multiple commits that land while a
+        render is in flight coalesce into a single follow-up rebuild.
+        """
+        while not self._report_stop.is_set():
+            if not self._report_dirty.wait(timeout=0.2):
+                continue
+            self._report_dirty.clear()
+            n = len(self.accepted_samples)
+            rgb = self.generate_heatmap()
+            bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+            with self._report_lock:
+                self._report_cache = bgr
+                self._report_cache_n = n
+
+    def close(self) -> None:
+        """Stop the background workers (call when collection ends).
+
+        Waits for any in-flight ``cv2.calibrateCamera``/report render to finish
+        before returning, so neither worker is force-killed mid-native-call at
+        interpreter exit.
         """
         self._cal_stop.set()
         self._cal_dirty.set()  # unblock the worker so it can see the stop flag
         if self._cal_thread is not None:
             self._cal_thread.join(timeout=10.0)
             self._cal_thread = None
+
+        self._report_stop.set()
+        self._report_dirty.set()  # unblock the worker so it can see the stop flag
+        if self._report_thread is not None:
+            self._report_thread.join(timeout=10.0)
+            self._report_thread = None
 
     # ──────────────────────────── Coverage ─────────────────────────────
 
@@ -568,17 +620,18 @@ class DataQualityJudge:
         return (frame * (1 - a) + color * a).astype(np.uint8)
 
     def render_frame(self, frame: np.ndarray, sample: Optional[CalibrationSample],
-                     show_heatmap: bool = False) -> np.ndarray:
+                     show_heatmap: bool = False, fps: Optional[float] = None) -> np.ndarray:
         """Augment the live camera frame (kept at full resolution, view unobstructed).
 
         Only lightweight, non-blocking overlays go on the frame: a guidance target,
-        an optional translucent heatmap, and a thin status border. All textual
-        guidance lives in the separate panel (see :meth:`render_panel`).
+        an optional translucent heatmap, a thin status border, and the FPS readout.
+        All other textual guidance lives in the separate panel (see :meth:`render_panel`).
 
         Args:
             frame: Current BGR frame (already carrying the detector's corner dots).
             sample: Result of :meth:`evaluate` for this frame (or ``None``).
             show_heatmap: Whether to blend the translucent corner heatmap onto the frame.
+            fps: Current loop FPS to display in the corner (omitted if ``None``).
 
         Returns:
             The augmented frame, the same size as the input.
@@ -599,7 +652,21 @@ class DataQualityJudge:
         # Thin status border (green = good view, orange = skip, red = no board)
         t = max(3, int(8 * s))
         cv2.rectangle(base, (0, 0), (base.shape[1] - 1, base.shape[0] - 1), border_col, t)
+
+        if fps is not None:
+            self._draw_fps(base, fps, s)
         return base
+
+    def _draw_fps(self, frame: np.ndarray, fps: float, s: float) -> None:
+        """Draw the loop FPS in the top-right corner (black-edged so it stays readable)."""
+        color = (80, 220, 80) if fps >= 20 else (60, 200, 230) if fps >= 10 else (70, 90, 240)
+        txt = f"{fps:.1f} FPS"
+        scale = 0.9 * s
+        thick = max(1, int(2 * s))
+        (tw, _), _ = cv2.getTextSize(txt, cv2.FONT_HERSHEY_SIMPLEX, scale, thick)
+        org = (frame.shape[1] - tw - int(24 * s), int(40 * s))
+        cv2.putText(frame, txt, org, cv2.FONT_HERSHEY_SIMPLEX, scale, (0, 0, 0), thick + 2, cv2.LINE_AA)
+        cv2.putText(frame, txt, org, cv2.FONT_HERSHEY_SIMPLEX, scale, color, thick, cv2.LINE_AA)
 
     def render_panel(self, sample: Optional[CalibrationSample],
                      panel_height: int = 900, panel_width: int = 460) -> np.ndarray:
@@ -619,21 +686,33 @@ class DataQualityJudge:
                                  panel_height, panel_width)
 
     def render_report_view(self) -> np.ndarray:
-        """Return the full report (heatmap + radar) as a BGR image, cached.
+        """Return the latest cached report (heatmap + radar) as a BGR image.
 
         This is the same figure produced by :meth:`generate_heatmap` (the
-        ``final_heatmap.png`` look). It is rebuilt only when a new view is committed,
-        so toggling it on during collection is cheap between saves.
+        ``final_heatmap.png`` look). A background worker (started on first call)
+        rebuilds it whenever :meth:`commit` keeps a new view; this call never
+        blocks on that rebuild, so the live camera preview stays smooth even
+        while the report is regenerating — it just shows the most recent cached
+        version until the new one is ready.
 
         Returns:
             The report as a BGR image ready for ``cv2.imshow``.
         """
-        n = len(self.accepted_samples)
-        if self._report_cache is None or self._report_cache_n != n:
+        if self._report_thread is None:
+            self._report_thread = threading.Thread(target=self._report_worker, daemon=True)
+            self._report_thread.start()
+
+        with self._report_lock:
+            cache = self._report_cache
+        if cache is None:
+            # Nothing collected yet: build once synchronously (cheap with no data)
+            # so callers always get a real image instead of a placeholder.
             rgb = self.generate_heatmap()
-            self._report_cache = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
-            self._report_cache_n = n
-        return self._report_cache
+            cache = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+            with self._report_lock:
+                self._report_cache = cache
+                self._report_cache_n = len(self.accepted_samples)
+        return cache
 
     def _draw_target(self, frame: np.ndarray, target: Tuple[float, float], s: float) -> None:
         """Draw a pulsing target marker where the next view is most needed."""

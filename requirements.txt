@@ -1,0 +1,9 @@
+# === Core CV backend (already used by the CLI) ===
+opencv-contrib-python==4.11.0.86
+numpy
+PyYAML
+
+# === GUI stack ===
+PySide6
+pyqtgraph
+qt-material

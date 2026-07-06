@@ -273,11 +273,22 @@ def collect_with_quality_assessment(
     frame_id = 0
     show_heatmap = False
     show_report = True
+    fps_ema = None
+    last_tick = time()
 
     while cap.isOpened():
         success, frame = cap.read()
         if not success:
             break
+
+        # Smoothed loop FPS (capture + detection + rendering) — the whole point is
+        # to surface stalls, so this is wall-clock time between frames, not just
+        # the camera's nominal rate.
+        now = time()
+        dt = now - last_tick
+        last_tick = now
+        inst_fps = (1.0 / dt) if dt > 0 else 0.0
+        fps_ema = inst_fps if fps_ema is None else (0.9 * fps_ema + 0.1 * inst_fps)
 
         display_frame = frame.copy()
 
@@ -298,7 +309,7 @@ def collect_with_quality_assessment(
         # The live frame + guidance panel always stay on top. By default the full
         # report is stacked below, resized to the top view's width; 'm' toggles that
         # strip off for an unobstructed, larger camera-only view.
-        cam = judge.render_frame(display_frame, sample, show_heatmap=show_heatmap)
+        cam = judge.render_frame(display_frame, sample, show_heatmap=show_heatmap, fps=fps_ema)
         panel_nat = judge.render_panel(sample)
         ph = cam.shape[0]
         pw = max(1, int(panel_nat.shape[1] * ph / panel_nat.shape[0]))

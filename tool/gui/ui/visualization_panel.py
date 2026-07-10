@@ -12,10 +12,11 @@ import logging
 
 # === Third-Party Libraries ===
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QCheckBox, QGroupBox, QVBoxLayout
+from PySide6.QtWidgets import QCheckBox, QVBoxLayout
 
 # === Local ===
 from core.config_manager import VisualizationSettings
+from ui.widgets import make_check_row, TitledGroupBox
 
 __all__ = ["VisualizationPanel"]
 
@@ -33,22 +34,22 @@ _TOGGLES: list[tuple[str, str]] = [
 ]
 
 
-class VisualizationPanel(QGroupBox):
+class VisualizationPanel(TitledGroupBox):
     """Group box of overlay checkboxes bound to :class:`VisualizationSettings`."""
 
     visualization_changed = Signal()
 
     def __init__(self) -> None:
-        super().__init__("Visualization")
+        super().__init__("VISUALIZATION")
         self._checks: dict[str, QCheckBox] = {}
 
         layout = QVBoxLayout(self)
         defaults = VisualizationSettings()
         for field_name, label in _TOGGLES:
-            check = QCheckBox(label)
+            row, check = make_check_row(label)
             check.setChecked(getattr(defaults, field_name))
             check.toggled.connect(self.visualization_changed)
-            layout.addWidget(check)
+            layout.addWidget(row)
             self._checks[field_name] = check
 
     def get_settings(self) -> VisualizationSettings:

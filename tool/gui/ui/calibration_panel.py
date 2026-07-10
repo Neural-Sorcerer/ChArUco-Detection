@@ -17,27 +17,27 @@ import logging
 # === Third-Party Libraries ===
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog, QFormLayout, QGroupBox,
+    QComboBox, QDoubleSpinBox, QFileDialog, QFormLayout,
     QHBoxLayout, QLabel, QLineEdit, QSpinBox, QVBoxLayout,
 )
 
 # === Local ===
 from app.constants import ARUCO_DICT_NAMES
 from core.config_manager import BoardSettings, CalibrationSettings
-from ui.widgets import block_wheel, make_browse_button
+from ui.widgets import block_wheel, make_browse_button, make_check_row, TitledGroupBox, TrimmedDoubleSpinBox
 
 __all__ = ["CalibrationPanel"]
 
 log = logging.getLogger(__name__)
 
 
-class CalibrationPanel(QGroupBox):
+class CalibrationPanel(TitledGroupBox):
     """Group box for board geometry and calibration options."""
 
     board_changed = Signal()
 
     def __init__(self) -> None:
-        super().__init__("Calibration board")
+        super().__init__("CALIBRATION BOARD")
 
         self._board_type = QComboBox()
         self._board_type.addItems(["ChArUco", "Checkerboard (soon)", "AprilGrid (soon)"])
@@ -48,31 +48,39 @@ class CalibrationPanel(QGroupBox):
         self._x_squares = QSpinBox()
         self._x_squares.setRange(2, 50)
         self._x_squares.setValue(7)
+        self._x_squares.setToolTip("Number of chessboard squares along the board's X axis")
 
         self._y_squares = QSpinBox()
         self._y_squares.setRange(2, 50)
         self._y_squares.setValue(5)
+        self._y_squares.setToolTip("Number of chessboard squares along the board's Y axis")
 
-        self._square_length = QDoubleSpinBox()
+        self._square_length = TrimmedDoubleSpinBox()
         self._square_length.setRange(0.001, 10.0)
         self._square_length.setDecimals(4)
         self._square_length.setSingleStep(0.005)
         self._square_length.setSuffix(" m")
         self._square_length.setValue(0.03)
+        self._square_length.setToolTip("Printed side length of one square, in metres")
 
-        self._marker_length = QDoubleSpinBox()
+        self._marker_length = TrimmedDoubleSpinBox()
         self._marker_length.setRange(0.0, 10.0)
         self._marker_length.setDecimals(4)
         self._marker_length.setSingleStep(0.005)
         self._marker_length.setSuffix(" m")
         self._marker_length.setSpecialValueText("auto (75%)")   # shown when value == 0
         self._marker_length.setValue(0.0)
+        self._marker_length.setToolTip("Printed side length of one marker; 0 = auto (75% of the square)")
 
         self._dictionary = QComboBox()
         self._dictionary.addItems(ARUCO_DICT_NAMES)
         self._select_text(self._dictionary, "DICT_6X6_1000")
+        self._dictionary.setToolTip("ArUco marker dictionary the board was generated with")
 
-        self._fisheye = QCheckBox("Fisheye camera model")
+        fisheye_check_row, self._fisheye = make_check_row(
+            "Fisheye camera model",
+            "Use the fisheye distortion model instead of the pinhole one",
+        )
 
         # Informational field of view for the fisheye model (typed in directly);
         # not used for calibration, only recorded in the config so we know what was used.
@@ -87,6 +95,7 @@ class CalibrationPanel(QGroupBox):
 
         self._camera_params = QLineEdit()
         self._camera_params.setPlaceholderText("optional intrinsics .xml (synthetic if empty)")
+        self._camera_params.setToolTip("Path to a pre-computed intrinsics .xml; leave empty for synthetic intrinsics")
         browse = make_browse_button(self, "Choose intrinsics .xml", folder=False)
         browse.clicked.connect(self._browse_params)
 
@@ -97,6 +106,7 @@ class CalibrationPanel(QGroupBox):
         form = QFormLayout()
         form.setHorizontalSpacing(18)   # a little more air between labels and fields
         form.setVerticalSpacing(8)
+        form.setLabelAlignment(Qt.AlignLeft | Qt.AlignVCenter)   # centre labels against their field
         form.addRow("Board type", self._board_type)
         form.addRow("Board ID", self._board_id)
         form.addRow("Squares X", self._x_squares)
@@ -107,7 +117,7 @@ class CalibrationPanel(QGroupBox):
         form.addRow("Intrinsics", params_row)
 
         fisheye_row = QHBoxLayout()
-        fisheye_row.addWidget(self._fisheye)
+        fisheye_row.addWidget(fisheye_check_row)
         fisheye_row.addWidget(QLabel("FoV"))
         fisheye_row.addWidget(self._fisheye_fov)
         fisheye_row.addStretch(1)

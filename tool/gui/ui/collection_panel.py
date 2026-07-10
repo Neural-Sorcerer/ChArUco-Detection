@@ -13,22 +13,22 @@ from __future__ import annotations
 import logging
 
 # === Third-Party Libraries ===
-from PySide6.QtCore import Signal
+from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QCheckBox, QDoubleSpinBox, QFileDialog, QFormLayout, QGroupBox, QHBoxLayout,
+    QDoubleSpinBox, QFileDialog, QFormLayout, QHBoxLayout,
     QLabel, QLineEdit, QSpinBox, QVBoxLayout,
 )
 
 # === Local ===
 from core.config_manager import CollectionSettings
-from ui.widgets import block_wheel, make_browse_button
+from ui.widgets import block_wheel, make_browse_button, make_check_row, TitledGroupBox
 
 __all__ = ["CollectionPanel"]
 
 log = logging.getLogger(__name__)
 
 
-class CollectionPanel(QGroupBox):
+class CollectionPanel(TitledGroupBox):
     """Group box for output location, quality-guided collection and auto-capture."""
 
     auto_capture_changed = Signal(bool, float)  # timed capture (plain mode)
@@ -37,24 +37,33 @@ class CollectionPanel(QGroupBox):
     heatmap_changed = Signal(bool)              # live coverage-heatmap tint (quality mode)
 
     def __init__(self) -> None:
-        super().__init__("Data collection")
+        super().__init__("DATA COLLECTION")
 
         self._output_dir = QLineEdit("outputs")
+        self._output_dir.setToolTip("Root folder that collection sessions are written into")
         browse = make_browse_button(self, "Choose output directory", folder=True)
+        browse.setFixedHeight(self._output_dir.sizeHint().height())   # same row height as the plain fields
         browse.clicked.connect(self._browse_output)
         dir_row = QHBoxLayout()
+        dir_row.setContentsMargins(0, 0, 0, 0)
+        dir_row.setSpacing(6)
         dir_row.addWidget(self._output_dir)
         dir_row.addWidget(browse)
 
         self._session_name = QLineEdit("calibration_session")
+        self._session_name.setToolTip("Name of this session's sub-folder under the output directory")
 
-        # --- Quality-guided collection (judge) ---
-        self._use_quality = QCheckBox("Quality-guided collection (judge)")
+        # --- Quality-guided collection ---
+        self._use_quality_row, self._use_quality = make_check_row(
+            "Quality-guided collection",
+            "Keep only sharp, diverse views and show the readiness dashboard",
+        )
         self._use_quality.setChecked(True)
 
         self._target_samples = QSpinBox()
         self._target_samples.setRange(1, 10000)
         self._target_samples.setValue(100)
+        self._target_samples.setToolTip("How many diverse frames to collect before the set is 'ready'")
 
         self._min_sharpness = QDoubleSpinBox()
         self._min_sharpness.setRange(0.0, 100000.0)
@@ -62,27 +71,31 @@ class CollectionPanel(QGroupBox):
         self._min_sharpness.setSingleStep(50.0)
         self._min_sharpness.setValue(400.0)
         self._min_sharpness.setSpecialValueText("off")   # shown when value == 0
+        self._min_sharpness.setToolTip("Reject frames blurrier than this (variance of Laplacian); 0 = off")
 
-        self._auto_save = QCheckBox("Auto-save accepted views")
-        self._show_heatmap = QCheckBox("Show coverage heatmap")
-
-        quality_form = QFormLayout()
-        quality_form.setHorizontalSpacing(18)
-        quality_form.setVerticalSpacing(8)
-        quality_form.addRow("Target samples", self._target_samples)
-        quality_form.addRow("Min sharpness", self._min_sharpness)
+        self._auto_save_row, self._auto_save = make_check_row(
+            "Auto-save accepted views",
+            "Automatically keep every accepted (sharp + diverse) view",
+        )
+        self._show_heatmap_row, self._show_heatmap = make_check_row(
+            "Show coverage heatmap",
+            "Tint the live frame with the coverage heatmap",
+        )
 
         # --- Save options ---
-        self._auto_timestamp = QCheckBox("Append timestamp to folder")
+        self._auto_timestamp_row, self._auto_timestamp = make_check_row(
+            "Append timestamp to folder",
+            "Add a date-time suffix to the session folder so runs never overwrite",
+        )
         self._auto_timestamp.setChecked(True)
-        self._save_raw = QCheckBox("Save raw frames")
+        self._save_raw_row, self._save_raw = make_check_row("Save raw frames")
         self._save_raw.setChecked(True)
-        self._save_visualized = QCheckBox("Save visualized frames")
-        self._save_metadata = QCheckBox("Save metadata JSON")
+        self._save_visualized_row, self._save_visualized = make_check_row("Save visualized frames")
+        self._save_metadata_row, self._save_metadata = make_check_row("Save metadata JSON")
         self._save_metadata.setChecked(True)
 
         # --- Plain-mode timed auto-capture ---
-        self._auto_capture = QCheckBox("Timed auto-capture")
+        self._auto_capture_row, self._auto_capture = make_check_row("Timed auto-capture")
         self._interval = QDoubleSpinBox()
         self._interval.setRange(0.05, 60.0)
         self._interval.setDecimals(2)
@@ -90,29 +103,38 @@ class CollectionPanel(QGroupBox):
         self._interval.setSuffix(" s")
         self._interval.setValue(1.0)
         capture_row = QHBoxLayout()
-        capture_row.addWidget(self._auto_capture)
+        capture_row.addWidget(self._auto_capture_row)
         capture_row.addWidget(QLabel("every"))
         capture_row.addWidget(self._interval)
+        capture_row.addStretch(1)
 
         self._session_dir_label = QLabel("session: -")
         self._session_dir_label.setWordWrap(True)
+        self._session_dir_label.setToolTip("Folder the current session writes into")
+        self._session_dir_label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
 
+        # One shared form so every field lines up to the same width: Output folder and
+        # Session name match Target samples / Min sharpness. AllNonFixedFieldsGrow makes
+        # the spin boxes grow to the same width as the line edits (equal right edges).
         form = QFormLayout()
         form.setHorizontalSpacing(18)
         form.setVerticalSpacing(8)
-        form.addRow("Output dir", dir_row)
-        form.addRow("Session", self._session_name)
+        form.setLabelAlignment(Qt.AlignLeft | Qt.AlignVCenter)   # centre labels against their field
+        form.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+        form.addRow("Output folder", dir_row)
+        form.addRow("Session name", self._session_name)
+        form.addRow("Target samples", self._target_samples)
+        form.addRow("Min sharpness", self._min_sharpness)
 
         layout = QVBoxLayout(self)
         layout.addLayout(form)
-        layout.addLayout(quality_form)          # Target samples, Min sharpness
-        layout.addWidget(self._use_quality)     # judge on/off sits under its settings
-        layout.addWidget(self._auto_save)
-        layout.addWidget(self._show_heatmap)
-        layout.addWidget(self._auto_timestamp)
-        layout.addWidget(self._save_raw)
-        layout.addWidget(self._save_visualized)
-        layout.addWidget(self._save_metadata)
+        layout.addWidget(self._use_quality_row)     # judge on/off sits under its settings
+        layout.addWidget(self._auto_save_row)
+        layout.addWidget(self._show_heatmap_row)
+        layout.addWidget(self._auto_timestamp_row)
+        layout.addWidget(self._save_raw_row)
+        layout.addWidget(self._save_visualized_row)
+        layout.addWidget(self._save_metadata_row)
         layout.addLayout(capture_row)
         layout.addWidget(self._session_dir_label)
 
@@ -130,9 +152,9 @@ class CollectionPanel(QGroupBox):
         """Grey out the settings that do not apply to the active collection mode."""
         self._target_samples.setEnabled(quality)
         self._min_sharpness.setEnabled(quality)
-        self._auto_save.setEnabled(quality)
-        self._show_heatmap.setEnabled(quality)
-        self._auto_capture.setEnabled(not quality)
+        self._auto_save_row.setEnabled(quality)      # disable the row so its caption greys out too
+        self._show_heatmap_row.setEnabled(quality)
+        self._auto_capture_row.setEnabled(not quality)
         self._interval.setEnabled(not quality)
 
     def _emit_auto_capture(self) -> None:

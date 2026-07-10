@@ -25,21 +25,22 @@ _EXTRA_QSS = """
 QGroupBox {
     border: 1px solid rgba(255, 255, 255, 0.12);
     border-radius: 6px;
-    margin-top: 14px;
-    padding: 12px 6px 6px 6px;
-    font-weight: bold;
+    margin-top: 10px;                 /* room for the title to sit on the top border */
+    padding: 14px 8px 8px 8px;
 }
-QGroupBox::title {
-    subcontrol-origin: margin;
-    subcontrol-position: top left;
-    left: 10px;
-    padding: 0 4px;
+/* Selectable, bold section title overlaid on the top border in place of the
+   native (non-selectable) group-box title. Its background matches the box fill
+   (qt-material secondaryDarkColor) so it "breaks" the border like a real title. */
+QLabel#PanelHeader {
+    font-weight: bold;
+    background-color: #31363b;
+    padding: 0px 4px;
 }
 QLabel#StatusValue {
     font-weight: bold;
 }
 QPushButton {
-    padding: 5px 12px;
+    padding: 3px 12px;
     border-radius: 5px;
 }
 QPushButton:hover {
@@ -57,6 +58,18 @@ QPushButton:checked {
 }
 QPushButton:disabled {
     color: rgba(255, 255, 255, 0.35);
+}
+/* Icon-only file/folder pickers: neutral edges, no blue hover/focus ring. */
+QPushButton#BrowseButton {
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    background-color: rgba(255, 255, 255, 0.04);
+}
+QPushButton#BrowseButton:hover {
+    border: 1px solid rgba(255, 255, 255, 0.32);
+    background-color: rgba(255, 255, 255, 0.10);
+}
+QPushButton#BrowseButton:pressed {
+    background-color: rgba(255, 255, 255, 0.16);
 }
 QComboBox:hover, QSpinBox:hover, QDoubleSpinBox:hover, QLineEdit:hover {
     border: 1px solid rgba(68, 138, 255, 0.75);

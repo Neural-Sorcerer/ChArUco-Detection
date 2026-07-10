@@ -35,21 +35,25 @@ class ControlBar(QFrame):
         self._quality_mode = False
 
         self._start = QPushButton("▶  Start")
+        self._start.setToolTip("Open the camera and start the live view")
         self._pause = QPushButton("⏸  Pause")
+        self._pause.setToolTip("Freeze / resume the live view without releasing the camera")
         self._pause.setCheckable(True)
-        self._stop = QPushButton("⏹  Stop")
+        self._stop = QPushButton("⏹  Finish")
+        self._stop.setToolTip("Finish capturing, release the camera and finalise the session")
         self._save = QPushButton("\U0001f4f7  Save frame")
         self._collect = QPushButton("⏺  Start collection")
+        self._collect.setToolTip("Start / stop a timed auto-capture session (plain mode)")
         self._collect.setCheckable(True)
 
         layout = QHBoxLayout(self)
-        layout.setContentsMargins(8, 6, 8, 6)
+        layout.setContentsMargins(8, 5, 8, 5)
         for button in (self._start, self._pause, self._stop):
-            button.setMinimumHeight(38)
+            button.setMinimumHeight(30)
             layout.addWidget(button)
         layout.addStretch(1)
         for button in (self._save, self._collect):
-            button.setMinimumHeight(38)
+            button.setMinimumHeight(30)
             layout.addWidget(button)
 
         self._start.clicked.connect(self.start_clicked)

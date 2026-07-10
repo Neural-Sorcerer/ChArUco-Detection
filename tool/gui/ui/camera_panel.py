@@ -15,33 +15,37 @@ import logging
 # === Third-Party Libraries ===
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtWidgets import (
-    QComboBox, QFormLayout, QGroupBox, QHBoxLayout, QPushButton, QVBoxLayout, QWidget,
+    QComboBox, QFormLayout, QHBoxLayout, QPushButton, QVBoxLayout, QWidget,
 )
 
 # === Local ===
 from core.camera_manager import CameraDevice
 from core.config_manager import CameraSettings
-from ui.widgets import block_wheel
+from ui.widgets import block_wheel, TitledGroupBox
 
 __all__ = ["CameraPanel"]
 
 log = logging.getLogger(__name__)
 
 
-class CameraPanel(QGroupBox):
+class CameraPanel(TitledGroupBox):
     """Group box exposing the camera device and its capture format choices."""
 
     request_refresh = Signal()
     apply_requested = Signal()
 
     def __init__(self) -> None:
-        super().__init__("Camera")
+        super().__init__("CAMERA")
         self._devices: list[CameraDevice] = []
 
         self._device_combo = QComboBox()
+        self._device_combo.setToolTip("Camera to open (/dev/videoN)")
         self._fourcc_combo = QComboBox()
+        self._fourcc_combo.setToolTip("Pixel format the camera streams in (e.g. MJPG, YUYV)")
         self._resolution_combo = QComboBox()
+        self._resolution_combo.setToolTip("Capture resolution supported by this device + format")
         self._fps_combo = QComboBox()
+        self._fps_combo.setToolTip("Frame rate supported at this resolution")
 
         refresh_button = QPushButton("🔄  Refresh cameras")
         refresh_button.setToolTip("Re-scan for connected cameras and their supported formats")
@@ -54,6 +58,7 @@ class CameraPanel(QGroupBox):
         form = QFormLayout()
         form.setHorizontalSpacing(18)   # a little more air between labels and fields
         form.setVerticalSpacing(8)
+        form.setLabelAlignment(Qt.AlignLeft | Qt.AlignVCenter)   # centre labels against their field
         form.addRow("Device", self._device_combo)
         form.addRow("Format", self._fourcc_combo)
         form.addRow("Resolution", self._resolution_combo)

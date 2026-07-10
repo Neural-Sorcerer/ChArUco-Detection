@@ -17,7 +17,14 @@ Use ``python run.py <tool> -h`` to see a tool's own options.
 import sys
 import logging
 import argparse
+from pathlib import Path
 from time import time
+
+# The simple CLI lives in tool/cli and shares the engine in tool/engine; put both on the
+# import path so ``from scripts`` and ``from src`` resolve when launched from the repo root.
+_TOOL_DIR = Path(__file__).resolve().parent / "tool"
+sys.path.insert(0, str(_TOOL_DIR / "engine"))
+sys.path.insert(0, str(_TOOL_DIR / "cli"))
 
 from scripts import charuco_reader
 from scripts import calibrate_camera

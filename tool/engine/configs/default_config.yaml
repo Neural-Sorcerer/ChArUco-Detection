@@ -24,7 +24,7 @@ calibration:
 collection:
   output_dir: "outputs"
   session_name: "calibration_session"
-  auto_timestamp_folder: true
+  auto_timestamp_folder: true    # append a date-time suffix to the session folder
   save_raw_frames: true
   save_visualized_frames: false
   save_metadata: true

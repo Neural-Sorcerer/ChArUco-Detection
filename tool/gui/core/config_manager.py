@@ -68,7 +68,7 @@ class CollectionSettings:
 
     output_dir: str = "outputs"
     session_name: str = "calibration_session"
-    auto_timestamp_folder: bool = True
+    auto_timestamp_folder: bool = True     # append a date-time suffix to the session folder
     save_raw_frames: bool = True
     save_visualized_frames: bool = False
     save_metadata: bool = True

@@ -32,7 +32,7 @@ import logging
 from PySide6.QtCore import Qt, Slot
 from PySide6.QtGui import QAction, QCloseEvent
 from PySide6.QtWidgets import (
-    QMainWindow, QMessageBox, QScrollArea, QSplitter, QVBoxLayout, QWidget, QFileDialog,
+    QLabel, QMainWindow, QMessageBox, QScrollArea, QSplitter, QVBoxLayout, QWidget, QFileDialog,
 )
 
 # === Local ===
@@ -88,6 +88,7 @@ class MainWindow(QMainWindow):
         self._build_layout()
         self._build_menu()
         self._connect_signals()
+        self._make_text_selectable()
 
         self.refresh_cameras()
         self._load_initial_config()
@@ -120,7 +121,7 @@ class MainWindow(QMainWindow):
         splitter.setStretchFactor(0, 0)
         splitter.setStretchFactor(1, 1)
         splitter.setStretchFactor(2, 0)
-        splitter.setSizes([400, 860, 300])
+        splitter.setSizes([460, 800, 300])   # start the settings sidebar at its max width
 
         central = QWidget()
         layout = QVBoxLayout(central)
@@ -130,6 +131,13 @@ class MainWindow(QMainWindow):
         layout.addWidget(splitter, stretch=1)
         layout.addWidget(self._control_bar)
         self.setCentralWidget(central)
+
+    def _make_text_selectable(self) -> None:
+        """Let the user select and copy the text of every static label (headers + field names)."""
+        for label in self.findChildren(QLabel):
+            label.setTextInteractionFlags(
+                label.textInteractionFlags() | Qt.TextInteractionFlag.TextSelectableByMouse
+            )
 
     def _build_menu(self) -> None:
         """Build the File menu (config save/load + exit)."""

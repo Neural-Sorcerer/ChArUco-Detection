@@ -20,11 +20,12 @@ import numpy as np
 from PySide6.QtCore import Qt, Slot
 from PySide6.QtGui import QBrush, QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import (
-    QGroupBox, QLabel, QProgressBar, QSizePolicy, QVBoxLayout, QWidget,
+    QLabel, QProgressBar, QSizePolicy, QVBoxLayout, QWidget,
 )
 
 # === Local ===
 from core.quality_collector import JudgmentSnapshot
+from ui.widgets import TitledGroupBox
 
 __all__ = ["JudgmentPanel"]
 
@@ -156,11 +157,11 @@ class _MiniMap(QWidget):
         painter.end()
 
 
-class JudgmentPanel(QGroupBox):
+class JudgmentPanel(TitledGroupBox):
     """Native readiness dashboard fed by :class:`JudgmentSnapshot` updates."""
 
     def __init__(self) -> None:
-        super().__init__("Calibration readiness")
+        super().__init__("CALIBRATION READINESS")
         self.setMinimumWidth(280)
         self.setMaximumWidth(360)
 
@@ -173,13 +174,16 @@ class JudgmentPanel(QGroupBox):
 
         self._samples = QLabel("Samples: 0 / 0")
         self._samples.setObjectName("StatusValue")
+        self._samples.setToolTip("Diverse frames kept / target needed to calibrate")
         self._progress = QProgressBar()
         self._progress.setRange(0, 100)
         self._progress.setTextVisible(False)
         self._progress.setFixedHeight(10)
 
         self._rms = QLabel("Live RMS: -")
+        self._rms.setToolTip("Live reprojection error (px); lower is sharper — aim below ~0.7")
         self._focus = QLabel("Focus: -")
+        self._focus.setToolTip("Image sharpness (variance of Laplacian); below the minimum is flagged BLUR")
 
         self._bars = {
             "position": _CoverageBar("Position (where)"),
@@ -197,7 +201,12 @@ class JudgmentPanel(QGroupBox):
         self._footer = QLabel("Keep collecting...")
         self._footer.setStyleSheet("color: #8a97a5;")
 
+        # Let the user select/copy any of the readout text.
+        for label in (self._status, self._samples, self._rms, self._focus, self._hint, self._footer):
+            label.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(8, 8, 8, 8)
         layout.setSpacing(6)
         layout.addWidget(self._status)
         layout.addWidget(self._samples)

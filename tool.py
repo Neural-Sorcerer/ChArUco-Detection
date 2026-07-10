@@ -6,7 +6,7 @@ Launches the PySide6 desktop tool for camera calibration, data collection and
 live Charuco visualization. The command-line tools remain available via
 ``run.py``; this is the graphical front-end over the same core logic.
 
-    python main.py
+    python tool.py
 """
 from __future__ import annotations
 
@@ -15,6 +15,12 @@ import os
 import sys
 import logging
 from pathlib import Path
+
+# The GUI tool lives in tool/gui and shares the engine in tool/engine; put both on the
+# import path so ``from ui`` / ``from core`` and ``from src`` resolve from the repo root.
+_TOOL_DIR = Path(__file__).resolve().parent / "tool"
+sys.path.insert(0, str(_TOOL_DIR / "engine"))
+sys.path.insert(0, str(_TOOL_DIR / "gui"))
 
 # === Third-Party Libraries ===
 import PySide6
